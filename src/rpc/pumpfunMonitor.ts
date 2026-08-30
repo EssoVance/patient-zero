@@ -60,6 +60,12 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
             order: 'DESC',
             includeNsfw: false,
           },
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+            'Origin': 'https://pump.fun',
+            'Referer': 'https://pump.fun/',
+          },
           timeout: 10_000,
         }
       );
