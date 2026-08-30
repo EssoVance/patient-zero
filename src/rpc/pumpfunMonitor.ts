@@ -51,8 +51,17 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
     if (!this.running) return;
     try {
       const response = await axios.get<PumpFunApiCoin[]>(
-        `${CONFIG.PUMPFUN_API}/newest`,
-        { timeout: 10_000 }
+        `${CONFIG.PUMPFUN_API}/coins`,
+        {
+          params: {
+            offset: 0,
+            limit: 50,
+            sort: 'created_timestamp',
+            order: 'DESC',
+            includeNsfw: false,
+          },
+          timeout: 10_000,
+        }
       );
 
       const now = Date.now();

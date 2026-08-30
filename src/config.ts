@@ -16,8 +16,8 @@ export const CONFIG = {
   PUMPFUN_PROGRAM_ID: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
   RAYDIUM_PROGRAM_ID: '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
 
-  // ── Pump.fun REST API (via PumpPortal — cloud-accessible) ──
-  PUMPFUN_API: 'https://pumpportal.fun/api/data',
+  // ── Pump.fun REST API (Heroku backup — same format as frontend-api) ──
+  PUMPFUN_API: 'https://client-api-2-74b1891ee9f9.herokuapp.com',
   PUMPFUN_POLL_INTERVAL_MS: 15_000,
 
   // ── Graph parameters ────────────────────────────────────
