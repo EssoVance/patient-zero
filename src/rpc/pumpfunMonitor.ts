@@ -1,19 +1,13 @@
-import axios from 'axios';
+import { Connection, PublicKey } from '@solana/web3.js';
 import EventEmitter from 'eventemitter3';
 import { CONFIG, logger } from '../config';
 import { PumpFunToken } from '../types';
 
 // ============================================================
-// PATIENT ZERO — Pump.fun New Pair Monitor
+// PATIENT ZERO — Pump.fun New Pair Monitor (Solana RPC mode)
+// Detects new pair creations directly from on-chain logs.
+// No external REST API required — works from any cloud server.
 // ============================================================
-
-interface PumpFunApiCoin {
-  mint: string;
-  name: string;
-  symbol: string;
-  created_timestamp: number;
-  bonding_curve: string;
-}
 
 interface PumpFunMonitorEvents {
   newPair: [PumpFunToken];
@@ -21,24 +15,51 @@ interface PumpFunMonitorEvents {
 }
 
 export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
+  private connection: Connection;
   private seenMints: Set<string> = new Set();
   private activePairs: PumpFunToken[] = [];
-  private pollTimer: NodeJS.Timeout | null = null;
+  private subscriptionId: number | null = null;
   private running = false;
-  private retryDelay = 1_000;
+
+  constructor() {
+    super();
+    this.connection = new Connection(CONFIG.RPC_HTTP_ENDPOINT, 'confirmed');
+  }
 
   start(): void {
     if (this.running) return;
     this.running = true;
-    logger.info('PumpFunMonitor started');
-    this.poll();
+    logger.info('PumpFunMonitor starting (Solana on-chain mode)…');
+
+    try {
+      const programId = new PublicKey(CONFIG.PUMPFUN_PROGRAM_ID);
+
+      this.subscriptionId = this.connection.onLogs(
+        programId,
+        async (logs) => {
+          if (!this.running) return;
+          // Pump.fun emits "Instruction: Create" for new token launches
+          if (logs.logs.some((l) => l.includes('Instruction: Create'))) {
+            await this.handleNewPair(logs.signature).catch((err) => {
+              logger.warn('handleNewPair error', err);
+            });
+          }
+        },
+        'confirmed'
+      );
+
+      logger.info(`PumpFunMonitor subscribed to program logs (sub=${this.subscriptionId})`);
+    } catch (err) {
+      logger.error('PumpFunMonitor failed to start', err);
+      this.emit('error', err as Error);
+    }
   }
 
   stop(): void {
     this.running = false;
-    if (this.pollTimer) {
-      clearTimeout(this.pollTimer);
-      this.pollTimer = null;
+    if (this.subscriptionId !== null) {
+      this.connection.removeOnLogsListener(this.subscriptionId).catch(() => {});
+      this.subscriptionId = null;
     }
     logger.info('PumpFunMonitor stopped');
   }
@@ -47,63 +68,46 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
     return [...this.activePairs];
   }
 
-  private async poll(): Promise<void> {
-    if (!this.running) return;
-    try {
-      const response = await axios.get<PumpFunApiCoin[]>(
-        `${CONFIG.PUMPFUN_API}/coins`,
-        {
-          params: {
-            offset: 0,
-            limit: 50,
-            sort: 'created_timestamp',
-            order: 'DESC',
-            includeNsfw: false,
-          },
-          timeout: 10_000,
-        }
-      );
+  private async handleNewPair(signature: string): Promise<void> {
+    const tx = await this.connection.getParsedTransaction(signature, {
+      maxSupportedTransactionVersion: 0,
+      commitment: 'confirmed',
+    });
 
-      const now = Date.now();
-      const oneHourAgo = now - 60 * 60 * 1_000;
+    if (!tx?.transaction?.message?.accountKeys) return;
 
-      const freshCoins = response.data.filter(
-        (c) => c.created_timestamp > oneHourAgo
-      );
+    const accounts = tx.transaction.message.accountKeys;
+    if (accounts.length < 3) return;
 
-      for (const coin of freshCoins) {
-        if (!this.seenMints.has(coin.mint)) {
-          this.seenMints.add(coin.mint);
-          const token: PumpFunToken = {
-            mint: coin.mint,
-            name: coin.name,
-            symbol: coin.symbol,
-            createdTimestamp: coin.created_timestamp,
-            bondingCurve: coin.bonding_curve,
-          };
-          this.activePairs.push(token);
-          // Keep only MAX_PAIRS_TRACKED by most recent
-          this.activePairs.sort((a, b) => b.createdTimestamp - a.createdTimestamp);
-          if (this.activePairs.length > CONFIG.MAX_PAIRS_TRACKED) {
-            this.activePairs = this.activePairs.slice(0, CONFIG.MAX_PAIRS_TRACKED);
-          }
-          logger.info(`New pair detected: ${token.symbol} (${token.mint})`);
-          this.emit('newPair', token);
-        }
-      }
+    // Pump.fun Create instruction account layout:
+    //   [0] mint        ← new token mint address
+    //   [1] mintAuthority
+    //   [2] bondingCurve
+    const mintAddress = accounts[0].pubkey.toBase58();
+    if (this.seenMints.has(mintAddress)) return;
+    this.seenMints.add(mintAddress);
 
-      this.retryDelay = 1_000; // reset on success
-    } catch (err) {
-      logger.warn(`PumpFun poll failed (retry in ${this.retryDelay}ms)`, err);
-      this.emit('error', err as Error);
-      // Exponential backoff, cap at 60s
-      this.retryDelay = Math.min(this.retryDelay * 2, 60_000);
+    const bondingCurve = accounts[2]?.pubkey?.toBase58() ?? '';
+    const timestamp = tx.blockTime ? tx.blockTime * 1000 : Date.now();
+
+    // Name/symbol not available without metadata fetch; use short mint as placeholder
+    const shortMint = mintAddress.slice(0, 8);
+    const token: PumpFunToken = {
+      mint: mintAddress,
+      name: shortMint,
+      symbol: mintAddress.slice(0, 4).toUpperCase(),
+      createdTimestamp: timestamp,
+      bondingCurve,
+    };
+
+    this.activePairs.push(token);
+    this.activePairs.sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+    if (this.activePairs.length > CONFIG.MAX_PAIRS_TRACKED) {
+      this.activePairs = this.activePairs.slice(0, CONFIG.MAX_PAIRS_TRACKED);
     }
 
-    this.pollTimer = setTimeout(
-      () => this.poll(),
-      this.retryDelay > 1_000 ? this.retryDelay : CONFIG.PUMPFUN_POLL_INTERVAL_MS
-    );
+    logger.info(`New pair detected on-chain: ${token.mint}`);
+    this.emit('newPair', token);
   }
 }
 
