@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-frontend/
+.env
+__pycache__/
+*.pyc
+*.pyo
+output/*.gif
+.DS_Store
+*.js.map
+*.tsbuildinfo
+.cache/
+.vite/
