@@ -4,9 +4,9 @@ import { CONFIG, logger } from '../config';
 import { PumpFunToken } from '../types';
 
 // ============================================================
-// PATIENT ZERO — Pump.fun New Pair Monitor (Solana RPC mode)
-// Detects new pair creations directly from on-chain logs.
-// No external REST API required — works from any cloud server.
+// PATIENT ZERO — Pump.fun New Pair Monitor (Solana on-chain)
+// Listens for pump.fun Create events directly on-chain.
+// Throttled to 1 tx fetch per 3s to avoid public RPC rate limits.
 // ============================================================
 
 interface PumpFunMonitorEvents {
@@ -21,9 +21,17 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
   private subscriptionId: number | null = null;
   private running = false;
 
+  // Throttle queue — process max 1 tx fetch every 3 seconds
+  private queue: string[] = [];
+  private processing = false;
+
   constructor() {
     super();
-    this.connection = new Connection(CONFIG.RPC_HTTP_ENDPOINT, 'confirmed');
+    this.connection = new Connection(CONFIG.RPC_HTTP_ENDPOINT, {
+      commitment: 'confirmed',
+      // Politely cap concurrent requests
+      httpHeaders: { 'Content-Type': 'application/json' },
+    });
   }
 
   start(): void {
@@ -36,13 +44,16 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
 
       this.subscriptionId = this.connection.onLogs(
         programId,
-        async (logs) => {
+        (logs) => {
           if (!this.running) return;
-          // Pump.fun emits "Instruction: Create" for new token launches
-          if (logs.logs.some((l) => l.includes('Instruction: Create'))) {
-            await this.handleNewPair(logs.signature).catch((err) => {
-              logger.warn('handleNewPair error', err);
-            });
+          // Only queue genuine Create events; skip duplicates and errors
+          if (
+            !logs.err &&
+            logs.logs.some((l) => l.includes('Instruction: Create')) &&
+            !this.queue.includes(logs.signature)
+          ) {
+            this.queue.push(logs.signature);
+            this.drainQueue();
           }
         },
         'confirmed'
@@ -57,6 +68,7 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
 
   stop(): void {
     this.running = false;
+    this.queue = [];
     if (this.subscriptionId !== null) {
       this.connection.removeOnLogsListener(this.subscriptionId).catch(() => {});
       this.subscriptionId = null;
@@ -66,6 +78,39 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
 
   getActivePairs(): PumpFunToken[] {
     return [...this.activePairs];
+  }
+
+  /** Drain queue one item at a time, with 3s gap between fetches. */
+  private drainQueue(): void {
+    if (this.processing || !this.running) return;
+    this.processing = true;
+
+    const processNext = async (): Promise<void> => {
+      if (!this.running || this.queue.length === 0) {
+        this.processing = false;
+        return;
+      }
+
+      // Keep queue from growing unbounded — drop old entries if > 20
+      if (this.queue.length > 20) {
+        const dropped = this.queue.splice(0, this.queue.length - 20);
+        logger.debug(`Queue overflow — dropped ${dropped.length} old signatures`);
+      }
+
+      const sig = this.queue.shift()!;
+      await this.handleNewPair(sig).catch((err) =>
+        logger.warn('handleNewPair failed', (err as Error).message)
+      );
+
+      // Wait 3 seconds before next fetch to respect public RPC rate limits
+      await new Promise<void>((r) => setTimeout(r, 3_000));
+      await processNext();
+    };
+
+    processNext().catch((err) => {
+      this.processing = false;
+      logger.warn('drainQueue error', err);
+    });
   }
 
   private async handleNewPair(signature: string): Promise<void> {
@@ -89,9 +134,8 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
 
     const bondingCurve = accounts[2]?.pubkey?.toBase58() ?? '';
     const timestamp = tx.blockTime ? tx.blockTime * 1000 : Date.now();
-
-    // Name/symbol not available without metadata fetch; use short mint as placeholder
     const shortMint = mintAddress.slice(0, 8);
+
     const token: PumpFunToken = {
       mint: mintAddress,
       name: shortMint,
