@@ -3,8 +3,5 @@
   "buildCommand": "npm run build:frontend",
   "outputDirectory": "dist-frontend",
   "installCommand": "npm install",
-  "framework": null,
-  "env": {
-    "VITE_WS_URL": "@ws_url"
-  }
+  "framework": null
 }
