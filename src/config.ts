@@ -16,8 +16,8 @@ export const CONFIG = {
   PUMPFUN_PROGRAM_ID: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
   RAYDIUM_PROGRAM_ID: '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
 
-  // ── Pump.fun REST API ───────────────────────────────────
-  PUMPFUN_API: 'https://frontend-api.pump.fun',
+  // ── Pump.fun REST API (via PumpPortal — cloud-accessible) ──
+  PUMPFUN_API: 'https://pumpportal.fun/api/data',
   PUMPFUN_POLL_INTERVAL_MS: 15_000,
 
   // ── Graph parameters ────────────────────────────────────
