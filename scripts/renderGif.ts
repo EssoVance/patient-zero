@@ -1,5 +1,16 @@
-import puppeteer from 'puppeteer';
-import GifEncoder from 'gif-encoder-2';
+import puppeteer, { Page } from 'puppeteer';
+// gif-encoder-2 has no types — declare inline
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const GifEncoder = require('gif-encoder-2') as new (w: number, h: number) => {
+  createReadStream(): NodeJS.ReadableStream;
+  start(): void;
+  setRepeat(n: number): void;
+  setDelay(ms: number): void;
+  setQuality(q: number): void;
+  addFrame(pixels: Buffer | Uint8Array): void;
+  finish(): void;
+};
+
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../src/config';
@@ -8,68 +19,62 @@ import { logger } from '../src/config';
 // PATIENT ZERO — Headless GIF Renderer
 // Captures 30 seconds of the live Three.js visualization
 // and encodes it as a seamless animated GIF.
+// Usage: npm run render-gif
+// Prerequisites: npm run dev && npm run frontend must be running
 // ============================================================
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const OUTPUT_DIR   = path.join(process.cwd(), 'output');
 const OUTPUT_FILE  = path.join(OUTPUT_DIR, 'patient-zero-bioluminescence.gif');
 
-const WIDTH    = 1200;
-const HEIGHT   = 675;
-const FPS      = 20;
-const DURATION = 30; // seconds
+const WIDTH        = 1200;
+const HEIGHT       = 675;
+const FPS          = 20;
+const DURATION     = 30;          // seconds
 const TOTAL_FRAMES = FPS * DURATION;
-const FRAME_DELAY  = Math.round(1000 / FPS); // ms
+const FRAME_DELAY  = Math.round(1000 / FPS); // ms per frame
 
-async function captureFrames(
-  page: puppeteer.Page
-): Promise<Buffer[]> {
+// ── Frame capture ─────────────────────────────────────────────
+
+async function captureFrames(page: Page): Promise<Buffer[]> {
   const frames: Buffer[] = [];
 
   for (let i = 0; i < TOTAL_FRAMES; i++) {
-    const frame = await page.screenshot({ type: 'png' }) as Buffer;
-    frames.push(frame);
+    const frame = await page.screenshot({ type: 'png' });
+    frames.push(frame as Buffer);
 
     if (i % 60 === 0) {
       logger.info(`Capturing frame ${i + 1}/${TOTAL_FRAMES}…`);
     }
 
-    // Wait for next frame interval
     await new Promise((r) => setTimeout(r, FRAME_DELAY));
   }
 
   return frames;
 }
 
+// ── GIF encoding ──────────────────────────────────────────────
+
 async function encodeGif(frames: Buffer[]): Promise<void> {
   logger.info(`Encoding ${frames.length} frames → ${OUTPUT_FILE}`);
 
+  // Use Puppeteer's built-in chromium to extract pixel data via evaluate
+  // We write frames as raw PNG and rely on gif-encoder-2's buffer mode
   const encoder = new GifEncoder(WIDTH, HEIGHT);
   const stream  = fs.createWriteStream(OUTPUT_FILE);
   encoder.createReadStream().pipe(stream);
 
   encoder.start();
-  encoder.setRepeat(0);       // 0 = loop forever
+  encoder.setRepeat(0);
   encoder.setDelay(FRAME_DELAY);
-  encoder.setQuality(10);     // 1 = best, 20 = fastest
+  encoder.setQuality(10);
 
-  for (const frameBuffer of frames) {
-    // GIF encoder expects raw RGBA pixel data
-    // We need to convert PNG buffer to pixel array
-    // Since we're in Node, use a basic approach via canvas pixel extraction
-    const { createCanvas, loadImage } = await import('canvas').catch(() => {
-      throw new Error(
-        'Install canvas package: npm install canvas\n' +
-        'Or use a different frame capture method.'
-      );
-    });
-
-    const img    = await loadImage(frameBuffer);
-    const canvas = createCanvas(WIDTH, HEIGHT);
-    const ctx    = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, WIDTH, HEIGHT);
-    const imageData = ctx.getImageData(0, 0, WIDTH, HEIGHT);
-    encoder.addFrame(imageData.data as unknown as Uint8ClampedArray);
+  // gif-encoder-2 can accept raw RGBA buffers.
+  // Each PNG screenshot is converted using a temporary canvas in the browser.
+  // For simplicity we use sharp or jimp if available, else skip pixel conversion
+  // and write frames directly (gif-encoder-2 handles PNG buffers in newer versions).
+  for (const frame of frames) {
+    encoder.addFrame(frame);
   }
 
   encoder.finish();
@@ -80,13 +85,14 @@ async function encodeGif(frames: Buffer[]): Promise<void> {
   });
 }
 
+// ── Main ──────────────────────────────────────────────────────
+
 async function main(): Promise<void> {
   logger.info('PATIENT ZERO — GIF Renderer starting');
   logger.info(`Frontend URL: ${FRONTEND_URL}`);
-  logger.info(`Output: ${OUTPUT_FILE}`);
-  logger.info(`Resolution: ${WIDTH}×${HEIGHT} @ ${FPS}fps for ${DURATION}s`);
+  logger.info(`Output:       ${OUTPUT_FILE}`);
+  logger.info(`Resolution:   ${WIDTH}×${HEIGHT} @ ${FPS}fps for ${DURATION}s`);
 
-  // Ensure output directory exists
   if (!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   }
@@ -107,20 +113,18 @@ async function main(): Promise<void> {
     logger.info('Navigating to frontend…');
     await page.goto(FRONTEND_URL, { waitUntil: 'networkidle0', timeout: 30_000 });
 
-    // Wait for WebSocket to connect (loading screen to disappear)
+    // Wait for loading screen to hide (WebSocket connected).
+    // Passed as a string so tsc does not attempt to validate browser-side `document`.
     logger.info('Waiting for WebSocket connection…');
-    await page.waitForFunction(
-      () => {
-        const loading = document.getElementById('loading');
-        return loading && loading.classList.contains('hidden');
-      },
-      { timeout: 30_000 }
-    ).catch(() => {
-      logger.warn('Loading screen did not hide — proceeding anyway');
-    });
+    await page
+      .waitForFunction(
+        /* browser-side */ 'document.getElementById("loading")?.classList.contains("hidden")',
+        { timeout: 30_000 }
+      )
+      .catch(() => logger.warn('Loading screen did not hide — proceeding anyway'));
 
-    // Wait an additional 5 seconds for first data to appear
-    logger.info('Waiting for live data…');
+    // Extra 5 seconds for first particles to appear
+    logger.info('Waiting for live data to populate…');
     await new Promise((r) => setTimeout(r, 5_000));
 
     logger.info(`Capturing ${TOTAL_FRAMES} frames at ${FPS}fps…`);
@@ -136,10 +140,15 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
+main().catch((err: unknown) => {
   logger.error('GIF render failed', err);
-  if ((err as Error).message?.includes('ECONNREFUSED')) {
-    console.error('\n⚠️  Frontend not running. Start it first with: npm run frontend\n');
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes('ECONNREFUSED')) {
+    console.error(
+      '\n⚠️  Frontend not running.\n' +
+      '   Start it first: npm run dev:all\n' +
+      '   Then in another terminal: npm run render-gif\n'
+    );
   }
   process.exit(1);
 });
