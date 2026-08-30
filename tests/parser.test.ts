@@ -21,7 +21,9 @@ const mockGetTransaction = solanaConn.getTransaction as jest.Mock;
 describe('TransactionParser', () => {
   const parser = new TransactionParser();
   const PAIR_ID = 'mint_abc123';
-  const LAUNCH_TIME = 1_700_000_000_000;
+  // blockTime in mock is 1_700_001 seconds → 1_700_001_000 ms.
+  // LAUNCH_TIME must be less than that so the "timestamp < launchTime" guard passes.
+  const LAUNCH_TIME = 0;
   const SIG = 'sig_xyz';
 
   beforeEach(() => {
