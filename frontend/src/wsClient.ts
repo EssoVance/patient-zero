@@ -50,9 +50,25 @@ class WsClient {
   private shouldReconnect = true;
 
   // Configurable endpoint — reads VITE env var or falls back to localhost
-  private readonly endpoint =
-    (import.meta as unknown as Record<string, Record<string, string>>).env?.VITE_WS_URL ||
-    'ws://localhost:8080';
+  private readonly endpoint = (() => {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    return isLocal ? 'ws://localhost:8080' : 'wss://patient-zero-backend.onrender.com';
+  })();
+
+  constructor() {
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+          console.log('[WsClient] Tab hidden, disconnecting to save resources');
+          this.disconnect();
+        } else if (document.visibilityState === 'visible') {
+          console.log('[WsClient] Tab visible, reconnecting');
+          this.shouldReconnect = true;
+          this.connect();
+        }
+      });
+    }
+  }
 
   connect(): void {
     try {

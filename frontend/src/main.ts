@@ -28,10 +28,8 @@ let latestState: GraphStateSerialized | null = null;
 let lastPairCount = 0;
 let audioStarted = false;
 
-const WS_URL = (import.meta as any).env?.VITE_WS_URL || 'ws://localhost:8080';
-const API_URL = WS_URL.includes('onrender.com') 
-  ? 'https://patient-zero-backend.onrender.com/api' 
-  : 'http://localhost:3001/api';
+// Always use the Render backend for REST calls since the app is deployed on Vercel
+const API_URL = 'https://patient-zero-backend.onrender.com/api';
 
 // ── DOM Elements ──────────────────────────────────────────────
 const btnMode1 = document.getElementById('btn-mode1')!;
