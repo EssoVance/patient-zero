@@ -7,8 +7,8 @@ const RAYDIUM_PROGRAM_ID = '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8';
 
 // ============================================================
 // PATIENT ZERO - Live Analyzer (Blueprint 3.0)
-// Uses direct HTTPS JSON-RPC calls via axios to avoid Node.js
-// fetch() compatibility issues on older Node runtimes.
+// Uses direct HTTPS JSON-RPC calls via axios.
+// Only uses confirmed Solana JSON-RPC spec methods.
 // ============================================================
 
 export class LiveAnalyzer {
@@ -30,74 +30,87 @@ export class LiveAnalyzer {
 
   /**
    * Analyzes a wallet based on its last 50 transactions.
+   * Uses getSignaturesForAddress (no per-tx parsing needed for scoring).
    */
   async analyzeWalletLive(walletAddress: string, apiKey: string) {
     try {
-      // Validate address format
       if (!walletAddress || walletAddress.length < 32 || walletAddress.length > 44) {
         throw new Error('Invalid wallet address format');
       }
 
-      logger.info(`[LiveAnalyzer] Fetching last 50 txs for wallet: ${walletAddress}`);
+      logger.info(`[LiveAnalyzer] Fetching signatures for wallet: ${walletAddress}`);
 
-      // getSignaturesForAddress
+      // getSignaturesForAddress — standard Solana RPC ✓
       const signatures = await this.rpc(apiKey, 'getSignaturesForAddress', [
         walletAddress,
-        { limit: 50 }
+        { limit: 50, commitment: 'confirmed' }
       ]);
 
       if (!signatures || signatures.length === 0) {
         return this.generateEmptyWalletResponse(walletAddress);
       }
 
-      // Fetch parsed transactions in one batch
-      const txSigs = signatures.map((s: any) => s.signature);
-      const txs = await this.rpc(apiKey, 'getParsedTransactions', [
-        txSigs,
-        { maxSupportedTransactionVersion: 0, encoding: 'jsonParsed' }
-      ]);
+      // Each sig entry: { signature, slot, blockTime, err, memo }
+      const successfulTxs = signatures.filter((s: any) => !s.err);
+      const totalTxs = signatures.length;
+      const successRate = successfulTxs.length / totalTxs;
 
+      // Look at individual transactions for DEX detection
+      // Use getTransaction (singular) — standard RPC ✓
+      // We only fetch a small sample (5) to keep latency low
+      const sampleSigs = signatures.slice(0, 5);
       let dexInteractions = 0;
       const recentActivity: any[] = [];
 
-      for (let i = 0; i < txs.length; i++) {
-        const tx = txs[i];
-        const meta = signatures[i];
-        if (!tx || !tx.meta) continue;
+      for (const sigEntry of sampleSigs) {
+        try {
+          const tx = await this.rpc(apiKey, 'getTransaction', [
+            sigEntry.signature,
+            { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0, commitment: 'confirmed' }
+          ]);
 
-        const accountKeys: string[] = tx.transaction?.message?.accountKeys?.map((k: any) =>
-          typeof k === 'string' ? k : k.pubkey
-        ) ?? [];
+          if (!tx || !tx.transaction) continue;
 
-        const involvesDex = accountKeys.includes(PUMPFUN_PROGRAM_ID) || accountKeys.includes(RAYDIUM_PROGRAM_ID);
-
-        if (involvesDex) {
-          dexInteractions++;
-
-          // Extract a token address (rough heuristic — pick any non-system, non-dex key)
-          const possibleToken = accountKeys.find(k =>
-            k !== walletAddress &&
-            k !== PUMPFUN_PROGRAM_ID &&
-            k !== RAYDIUM_PROGRAM_ID &&
-            k !== '11111111111111111111111111111111' &&
-            k !== 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+          const accountKeys: string[] = tx.transaction.message.accountKeys.map((k: any) =>
+            typeof k === 'string' ? k : (k.pubkey ?? k)
           );
 
-          if (recentActivity.length < 5 && possibleToken) {
-            recentActivity.push({
-              token_address: possibleToken,
-              token_name: possibleToken.slice(0, 6),
-              entry_time: new Date((meta.blockTime || 0) * 1000).toISOString(),
-              relative_timing: 'recent',
-              estimated_position: 'unknown'
-            });
+          const involvesDex = accountKeys.includes(PUMPFUN_PROGRAM_ID) || accountKeys.includes(RAYDIUM_PROGRAM_ID);
+
+          if (involvesDex) {
+            dexInteractions++;
+
+            // Find a token address (skip system/dex/wallet keys)
+            const systemKeys = new Set([
+              walletAddress,
+              PUMPFUN_PROGRAM_ID,
+              RAYDIUM_PROGRAM_ID,
+              '11111111111111111111111111111111',
+              'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+              'SysvarRent111111111111111111111111111111111',
+              'ComputeBudget111111111111111111111111111111'
+            ]);
+            const possibleToken = accountKeys.find(k => !systemKeys.has(k));
+
+            if (recentActivity.length < 5 && possibleToken) {
+              recentActivity.push({
+                token_address: possibleToken,
+                token_name: possibleToken.slice(0, 6),
+                entry_time: new Date((sigEntry.blockTime || 0) * 1000).toISOString(),
+                relative_timing: 'recent',
+                estimated_position: 'unknown'
+              });
+            }
           }
+        } catch (_e) {
+          // Skip failed individual tx fetches
         }
       }
 
-      const activityRatio = dexInteractions / signatures.length;
-      const score = Math.min(0.95, 0.2 + activityRatio * 0.6);
-      const confidence = Math.min(1.0, signatures.length / 50);
+      // Score: base on DEX activity in our sample + success rate
+      const sampleDexRate = dexInteractions / Math.max(sampleSigs.length, 1);
+      const score = Math.min(0.95, 0.2 + sampleDexRate * 0.65 + successRate * 0.15);
+      const confidence = Math.min(1.0, totalTxs / 50);
       const adjustedScore = score * confidence;
 
       let classification = 'likely_follower';
@@ -107,14 +120,14 @@ export class LiveAnalyzer {
       return {
         wallet: walletAddress,
         wallet_snippet: walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4),
-        analysis_basis: 'last_50_transactions',
-        transaction_count: signatures.length,
+        analysis_basis: `last_${totalTxs}_transactions`,
+        transaction_count: totalTxs,
         classification,
         originator_score: Math.round(adjustedScore * 100) / 100,
         confidence: Math.round(confidence * 100) / 100,
         leadership_indicators: {
-          early_entry_rate: Math.round(activityRatio * 100) / 100,
-          timing_consistency: 0.5,
+          early_entry_rate: Math.round(sampleDexRate * 100) / 100,
+          timing_consistency: Math.round(successRate * 100) / 100,
           leadership_evidence: adjustedScore > 0.6 ? 'high' : (adjustedScore > 0.3 ? 'medium' : 'low')
         },
         recent_activity: recentActivity
@@ -128,6 +141,7 @@ export class LiveAnalyzer {
 
   /**
    * Analyzes a token by looking at its top holders as a proxy for early buyers.
+   * Uses getTokenLargestAccounts + getAccountInfo (both standard RPC ✓)
    */
   async analyzeTokenLive(tokenAddress: string, apiKey: string) {
     try {
@@ -137,9 +151,12 @@ export class LiveAnalyzer {
 
       logger.info(`[LiveAnalyzer] Fetching top holders for token: ${tokenAddress}`);
 
-      // getTokenLargestAccounts
-      const result = await this.rpc(apiKey, 'getTokenLargestAccounts', [tokenAddress]);
-      
+      // getTokenLargestAccounts — standard Solana RPC ✓
+      const result = await this.rpc(apiKey, 'getTokenLargestAccounts', [
+        tokenAddress,
+        { commitment: 'confirmed' }
+      ]);
+
       if (!result || !result.value || result.value.length === 0) {
         return this.generateEmptyTokenResponse(tokenAddress);
       }
@@ -152,10 +169,13 @@ export class LiveAnalyzer {
         const acc = topHolders[i];
         let ownerAddress = acc.address;
 
-        // Resolve the token account to its owner wallet
+        // getAccountInfo with jsonParsed encoding to resolve token account owner — standard RPC ✓
         try {
-          const parsedAccResult = await this.rpc(apiKey, 'getParsedAccountInfo', [acc.address]);
-          const owner = parsedAccResult?.value?.data?.parsed?.info?.owner;
+          const accInfoResult = await this.rpc(apiKey, 'getAccountInfo', [
+            acc.address,
+            { encoding: 'jsonParsed', commitment: 'confirmed' }
+          ]);
+          const owner = accInfoResult?.value?.data?.parsed?.info?.owner;
           if (owner) ownerAddress = owner;
         } catch (_e) {
           // Keep fallback to token account address
