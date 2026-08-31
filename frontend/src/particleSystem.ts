@@ -185,4 +185,14 @@ export class ParticleSystem {
     }
     return map;
   }
+
+  setVisible(visible: boolean): void {
+    for (const entry of this.particles.values()) {
+      entry.mesh.visible = visible;
+      entry.glow.visible = visible;
+    }
+    for (const flash of this.flashes) {
+      flash.mesh.visible = visible;
+    }
+  }
 }

@@ -110,4 +110,11 @@ export class EdgeRenderer {
       }
     }
   }
+
+  setVisible(visible: boolean): void {
+    for (const entry of this.edges.values()) {
+      entry.line.visible = visible;
+      entry.dot.visible = visible;
+    }
+  }
 }

@@ -108,57 +108,128 @@
       text-transform: uppercase;
       z-index: 10;
     }
-    /* ── Wallet Lookup Panel ── */
-    #lookup-panel {
-      position: fixed; top: 180px; left: 20px;
-      background: rgba(0,10,20,0.75);
-      border: 1px solid rgba(0,255,200,0.2);
-      border-radius: 4px;
-      padding: 14px 18px;
-      font-size: 11px;
-      backdrop-filter: blur(4px);
-      min-width: 280px;
+    /* ── Mode Toggle ── */
+    #mode-toggle {
+      position: fixed; top: 20px; right: 20px;
+      display: flex; gap: 8px;
       z-index: 10;
     }
-    #lookup-panel h3 {
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      color: rgba(0,255,200,0.6);
+    .mode-btn {
+      background: rgba(0,20,40,0.6);
+      border: 1px solid rgba(0,255,200,0.3);
+      color: rgba(0,255,200,0.5);
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
       text-transform: uppercase;
-      margin-bottom: 10px;
+      padding: 8px 12px;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: all 0.2s;
     }
-    #lookup-input {
+    .mode-btn:hover { background: rgba(0,255,200,0.1); color: #00ffff; }
+    .mode-btn.active {
+      background: rgba(0,255,200,0.2);
+      border-color: #00ffff;
+      color: #00ffff;
+      box-shadow: 0 0 8px rgba(0,255,255,0.3);
+    }
+
+    /* ── Mode 2 Input Panel ── */
+    #mode2-input {
+      position: fixed; top: 180px; left: 20px;
+      background: rgba(0,10,20,0.85);
+      border: 1px solid rgba(0,255,200,0.2);
+      border-radius: 4px;
+      padding: 16px;
+      width: 320px;
+      backdrop-filter: blur(6px);
+      z-index: 10;
+      transition: opacity 0.3s;
+    }
+    #mode2-input.hidden { display: none; }
+    .radio-group {
+      display: flex; gap: 16px; margin-bottom: 12px;
+      font-size: 11px;
+    }
+    .radio-group label {
+      display: flex; align-items: center; gap: 6px; cursor: pointer;
+    }
+    .radio-group input[type="radio"] { accent-color: #00ffff; }
+    
+    #analysis-input {
       width: 100%;
-      background: rgba(0, 20, 40, 0.5);
+      background: rgba(0,20,40,0.5);
       border: 1px solid rgba(0,255,200,0.3);
       color: #00ffcc;
       font-family: 'Space Mono', monospace;
-      font-size: 10px;
-      padding: 6px 8px;
+      font-size: 11px;
+      padding: 8px;
       border-radius: 2px;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
       outline: none;
     }
-    #lookup-input:focus { border-color: #00ffff; }
-    #lookup-btn {
-      width: 100%;
-      background: rgba(0, 255, 200, 0.1);
+    #analysis-input:focus { border-color: #00ffff; }
+    
+    .btn-row { display: flex; gap: 8px; }
+    .action-btn {
+      flex: 1;
+      background: rgba(0,255,200,0.1);
       border: 1px solid rgba(0,255,200,0.4);
       color: #00ffff;
       font-family: 'Space Mono', monospace;
       font-size: 10px;
       text-transform: uppercase;
-      padding: 6px 0;
+      padding: 8px 0;
       cursor: pointer;
       border-radius: 2px;
       transition: all 0.2s;
     }
-    #lookup-btn:hover { background: rgba(0, 255, 200, 0.2); }
-    #lookup-result { margin-top: 12px; line-height: 1.8; display: none; }
-    .result-row { display: flex; justify-content: space-between; }
-    .score-high { color: #00ffff; text-shadow: 0 0 5px rgba(0,255,255,0.5); }
-    .score-med { color: #00ff80; }
-    .score-low { color: #004d20; }
+    .action-btn:hover { background: rgba(0,255,200,0.2); }
+    .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #analysis-error {
+      color: #ff3366; font-size: 10px; margin-top: 10px;
+      display: none;
+    }
+
+    /* ── Mode 2 Summary Panel ── */
+    #summary-panel {
+      position: fixed; top: 80px; right: 20px;
+      background: rgba(0,10,20,0.85);
+      border: 1px solid rgba(0,255,200,0.2);
+      border-radius: 4px;
+      padding: 20px;
+      width: 360px;
+      max-height: 80vh;
+      overflow-y: auto;
+      backdrop-filter: blur(6px);
+      z-index: 10;
+    }
+    #summary-panel.hidden { display: none; }
+    #summary-panel h3 { font-size: 14px; color: #00ffff; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.1em; }
+    .summary-stat { margin-bottom: 8px; font-size: 11px; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(0,255,200,0.1); padding-bottom: 4px; }
+    .history-list { margin-top: 16px; }
+    .history-item { font-size: 10px; padding: 6px 0; border-bottom: 1px dashed rgba(0,255,200,0.15); }
+    
+    /* ── Briefing Panel (Floating) ── */
+    #briefing-panel {
+      position: absolute;
+      background: rgba(0,15,30,0.9);
+      border: 1px solid #00ffff;
+      border-radius: 4px;
+      padding: 16px;
+      width: 280px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 0 15px rgba(0,255,255,0.2);
+      z-index: 20;
+      pointer-events: auto;
+    }
+    #briefing-panel.hidden { display: none; }
+    #briefing-close {
+      position: absolute; top: 8px; right: 8px;
+      background: none; border: none; color: #00ffff; cursor: pointer; font-size: 12px;
+    }
+    
   </style>
 </head>
 <body>
@@ -179,17 +250,29 @@
     <div style="font-size:9px;word-break:break-all;color:#00ffff;" id="stat-top-wallet">—</div>
   </div>
 
-  <div id="lookup-panel">
-    <h3>Wallet Analysis</h3>
-    <input type="text" id="lookup-input" placeholder="Enter wallet address..." spellcheck="false" />
-    <button id="lookup-btn">Analyze Identity</button>
-    
-    <div id="lookup-result">
-      <div class="result-row"><span class="stat-label">Classification:</span><span id="lookup-class" style="font-weight:bold;">—</span></div>
-      <div class="result-row"><span class="stat-label">Originator Score:</span><span id="lookup-orig-score">—</span></div>
-      <div class="result-row"><span class="stat-label">Follower Score:</span><span id="lookup-foll-score">—</span></div>
-      <div class="result-row"><span class="stat-label">Pairs Traded:</span><span id="lookup-pairs">—</span></div>
+  <div id="mode-toggle">
+    <button id="btn-mode1" class="mode-btn active">Mode 1: Ecosystem</button>
+    <button id="btn-mode2" class="mode-btn">Mode 2: Analysis</button>
+  </div>
+
+  <div id="mode2-input" class="hidden">
+    <div class="radio-group">
+      <label><input type="radio" name="analysisType" value="wallet" checked> Wallet</label>
+      <label><input type="radio" name="analysisType" value="token"> Token</label>
     </div>
+    <input type="text" id="analysis-input" placeholder="Enter wallet address..." spellcheck="false" autocomplete="off" />
+    <div class="btn-row">
+      <button id="analysis-btn" class="action-btn">Analyze</button>
+      <button id="analysis-reset" class="action-btn">Reset</button>
+    </div>
+    <div id="analysis-error"></div>
+  </div>
+
+  <div id="summary-panel" class="hidden"></div>
+  
+  <div id="briefing-panel" class="hidden">
+    <button id="briefing-close">✕</button>
+    <div id="briefing-content"></div>
   </div>
 
   <div id="legend">
