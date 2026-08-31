@@ -41,8 +41,11 @@ export class LiveAnalyzer {
    */
   async analyzeWalletLive(walletAddress: string, apiKey: string) {
     try {
-      if (!walletAddress || walletAddress.length < 32 || walletAddress.length > 44) {
-        throw new Error('Invalid wallet address format');
+      if (!walletAddress || walletAddress.startsWith('0x')) {
+        throw new Error('Invalid Solana wallet address. Ethereum (0x...) addresses are not supported.');
+      }
+      if (walletAddress.length < 32 || walletAddress.length > 44) {
+        throw new Error('Invalid wallet address length. Solana addresses are 32-44 characters.');
       }
 
       logger.info(`[LiveAnalyzer] Fetching signatures for wallet: ${walletAddress}`);
@@ -152,16 +155,20 @@ export class LiveAnalyzer {
    */
   async analyzeTokenLive(tokenAddress: string, apiKey: string) {
     try {
-      if (!tokenAddress || tokenAddress.length < 32 || tokenAddress.length > 44) {
-        throw new Error('Invalid token address format');
+      // Validate: Solana addresses are base58, 32-44 chars, never start with 0x
+      if (!tokenAddress || tokenAddress.startsWith('0x')) {
+        throw new Error('Invalid Solana token address. Ethereum (0x...) addresses are not supported. Please enter a Solana SPL token mint address.');
+      }
+      if (tokenAddress.length < 32 || tokenAddress.length > 44) {
+        throw new Error('Invalid token address length. Solana addresses are 32-44 characters.');
       }
 
       logger.info(`[LiveAnalyzer] Fetching top holders for token: ${tokenAddress}`);
 
       // getTokenLargestAccounts — standard Solana RPC ✓
+      // Pass ONLY the pubkey string (no config object — avoids -32602 on Helius)
       const result = await this.rpc(apiKey, 'getTokenLargestAccounts', [
-        tokenAddress,
-        { commitment: 'confirmed' }
+        tokenAddress
       ]);
 
       if (!result || !result.value || result.value.length === 0) {
