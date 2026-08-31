@@ -50,12 +50,13 @@ export class TransactionParser {
       const timestamp = tx.blockTime * 1_000; // convert to ms
 
       // Extract fee payer as the buyer wallet
-      const accountKeys =
-        tx.transaction.message.getAccountKeys?.()?.staticAccountKeys ??
-        (tx.transaction.message as unknown as { accountKeys: { toBase58(): string }[] }).accountKeys;
-
-      if (!accountKeys || accountKeys.length === 0) return null;
-      const wallet = accountKeys[0].toBase58();
+      // V0 transactions have staticAccountKeys, legacy have accountKeys. 
+      // Fee payer is always index 0.
+      const msg = tx.transaction.message as any;
+      const staticKeys = msg.staticAccountKeys || msg.accountKeys;
+      
+      if (!staticKeys || staticKeys.length === 0) return null;
+      const wallet = staticKeys[0].toString();
 
       // Determine SOL amount from pre/post balances of the fee payer
       const meta = tx.meta;
