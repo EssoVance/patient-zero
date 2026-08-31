@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { TokenAnalysisResult, ScoredWallet } from './appState';
 
 // ============================================================
-// PATIENT ZERO — Mode 2 Particle System (Specific Analysis)
+// PATIENT ZERO - Mode 2 Particle System (Specific Analysis)
 // ============================================================
 
 const COLOR_LEADING = new THREE.Color(0x00ffff); // bright cyan
@@ -53,7 +53,7 @@ export class Mode2Scene {
     this.particles = [];
   }
 
-  renderTokenAnalysis(data: TokenAnalysisResult): void {
+  renderTokenAnalysis(res: TokenAnalysisResult): void {
     this.clear();
 
     const renderGroup = (wallets: ScoredWallet[], isLeading: boolean, radiusOffset: number) => {
@@ -72,7 +72,7 @@ export class Mode2Scene {
         const pos = new THREE.Vector3(x, y, z);
         const color = isLeading ? COLOR_LEADING.clone() : COLOR_FOLLOWER.clone();
         
-        // Sizes based on blueprint
+        // Sizes based on score
         const pSize = isLeading ? 3.0 + w.originator_score * 2.0 : 2.0 + w.originator_score * 1.0;
 
         const geo = new THREE.SphereGeometry(pSize, 12, 12);
@@ -111,8 +111,12 @@ export class Mode2Scene {
       }
     };
 
-    renderGroup(data.leading_wallets, true, 0);
-    renderGroup(data.follower_wallets, false, 0);
+    // Filter into leaders and followers based on score
+    const leaders = res.buyer_sequence.filter(w => w.originator_score >= 0.7);
+    const followers = res.buyer_sequence.filter(w => w.originator_score < 0.7);
+
+    renderGroup(leaders, true, 0);
+    renderGroup(followers, false, 0);
   }
 
   update(delta: number): void {

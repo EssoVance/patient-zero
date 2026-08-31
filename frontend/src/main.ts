@@ -45,7 +45,20 @@ const briefingClose = document.getElementById('briefing-close')!;
 const analysisInput = document.getElementById('analysis-input') as HTMLInputElement;
 const analysisBtn = document.getElementById('analysis-btn') as HTMLButtonElement;
 const analysisReset = document.getElementById('analysis-reset') as HTMLButtonElement;
-const analysisError = document.getElementById('analysis-error')!;
+const analysisError = document.getElementById('analysis-error') as HTMLDivElement;
+
+const apiKeyInput = document.getElementById('api-key-input') as HTMLInputElement;
+const shareCardPanel = document.getElementById('share-card-panel') as HTMLElement;
+const btnShareImage = document.getElementById('btn-share-image') as HTMLButtonElement;
+const btnShareText = document.getElementById('btn-share-text') as HTMLButtonElement;
+const shareCanvas = document.getElementById('share-canvas') as HTMLCanvasElement;
+
+if (appState.userApiKey) {
+  apiKeyInput.value = appState.userApiKey;
+}
+apiKeyInput.addEventListener('change', (e) => {
+  appState.setApiKey((e.target as HTMLInputElement).value);
+});
 
 // ── WebSocket ─────────────────────────────────────────────────
 wsClient.onUpdate((state) => {
@@ -116,6 +129,7 @@ appState.on(() => {
     hudStats.style.display = 'block';
     legend.style.display = 'block';
     mode2InputPanel.classList.add('hidden');
+    shareCardPanel.classList.add('hidden');
     summaryPanel.classList.add('hidden');
     briefingPanel.classList.add('hidden');
     analysisError.style.display = 'none';
@@ -134,12 +148,15 @@ appState.on(() => {
     if (appState.analysisType === 'wallet' && appState.analysisResult) {
       renderWalletSummary(appState.analysisResult as WalletAnalysisResult);
       summaryPanel.classList.remove('hidden');
+      shareCardPanel.classList.remove('hidden');
       mode2Scene.clear();
     } else if (appState.analysisType === 'token' && appState.analysisResult) {
       mode2Scene.renderTokenAnalysis(appState.analysisResult as TokenAnalysisResult);
       summaryPanel.classList.add('hidden');
+      shareCardPanel.classList.remove('hidden');
     } else {
       summaryPanel.classList.add('hidden');
+      shareCardPanel.classList.add('hidden');
       mode2Scene.clear();
     }
   }
@@ -161,6 +178,11 @@ appState.on(() => {
 analysisBtn.addEventListener('click', async () => {
   const address = analysisInput.value.trim();
   if (!address) return;
+  
+  if (!appState.userApiKey) {
+    appState.setError('Helius API key required for analysis');
+    return;
+  }
 
   const typeRadios = document.getElementsByName('analysisType');
   let type = 'wallet';
@@ -172,12 +194,16 @@ analysisBtn.addEventListener('click', async () => {
 
   appState.setLoading(true);
   briefingPanel.classList.add('hidden');
+  shareCardPanel.classList.add('hidden');
 
   try {
     const res = await fetch(`${API_URL}/analyze/${type}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [`${type}_address`]: address })
+      body: JSON.stringify({ 
+        [`${type}_address`]: address,
+        user_api_key: appState.userApiKey
+      })
     });
     const data = await res.json();
 
@@ -202,33 +228,111 @@ analysisInput.addEventListener('keypress', (e) => {
 });
 
 function renderWalletSummary(res: WalletAnalysisResult): void {
-  const stats = res.leadership_stats;
-  let historyHtml = res.discovery_history.map(h => `
+  const indicators = res.leadership_indicators;
+  let historyHtml = res.recent_activity.map(h => `
     <div class="history-item">
-      <div><span style="color:#00ffff">${h.token_symbol}</span> (${h.token_address.slice(0,6)}…)</div>
-      <div style="color:rgba(0,255,200,0.6)">Position: #${h.position} | Score: ${(h.originator_score*100).toFixed(1)}%</div>
+      <div><span style="color:#00ffff">${h.token_name}</span> (${h.token_address.slice(0,6)}.)</div>
+      <div style="color:rgba(0,255,200,0.6)">Entry: ${new Date(h.entry_time).toLocaleString()}</div>
     </div>
   `).join('');
 
-  if (!historyHtml) historyHtml = '<div class="history-item" style="color:rgba(255,255,255,0.4)">No originator discoveries found.</div>';
+  if (!historyHtml) historyHtml = '<div class="history-item" style="color:rgba(255,255,255,0.4)">No recent DEX activity found.</div>';
 
   summaryPanel.innerHTML = `
     <h3>Wallet Leadership Summary</h3>
     <div class="summary-stat"><span>Classification:</span> <span style="color:#00ffff">${res.classification.replace('_', ' ').toUpperCase()}</span></div>
-    <div class="summary-stat"><span>Coins Led:</span> <span>${stats.coins_led}</span></div>
-    <div class="summary-stat"><span>Top 5 Appearances:</span> <span>${stats.top_5_appearances}</span></div>
-    <div class="summary-stat"><span>Avg Originator Score:</span> <span>${(stats.avg_originator_score * 100).toFixed(1)}%</span></div>
-    <div class="summary-stat"><span>Network Centrality:</span> <span>${(stats.network_centrality * 100).toFixed(1)}%</span></div>
-    <div class="summary-stat"><span>Follower Ratio:</span> <span>${(stats.follower_ratio * 100).toFixed(1)}%</span></div>
+    <div class="summary-stat"><span>Transactions Analyzed:</span> <span>${res.transaction_count}</span></div>
+    <div class="summary-stat"><span>Originator Score:</span> <span>${(res.originator_score * 100).toFixed(1)}%</span></div>
+    <div class="summary-stat"><span>Confidence:</span> <span>${(res.confidence * 100).toFixed(1)}%</span></div>
+    <div class="summary-stat"><span>Early Entry Rate:</span> <span>${(indicators.early_entry_rate * 100).toFixed(1)}%</span></div>
+    <div class="summary-stat"><span>Leadership Evidence:</span> <span style="text-transform:uppercase">${indicators.leadership_evidence}</span></div>
     
-    <h3 style="margin-top: 24px; font-size: 11px;">Discovery History</h3>
+    <h3 style="margin-top: 24px; font-size: 11px;">Recent DEX Activity</h3>
     <div class="history-list">
       ${historyHtml}
     </div>
   `;
 }
 
-// ── Raycaster (Particle Click) ────────────────────────────────
+// Share Generators
+btnShareText.addEventListener('click', () => {
+  let text = '';
+  if (appState.analysisType === 'wallet' && appState.analysisResult) {
+    const res = appState.analysisResult as WalletAnalysisResult;
+    text = `🧬 **PATIENT ZERO Analysis**\n\n` +
+           `**Wallet:** \`${res.wallet_snippet}\`\n` +
+           `**Class:** ${res.classification.replace('_', ' ').toUpperCase()}\n` +
+           `**Originator Score:** ${(res.originator_score * 100).toFixed(1)}%\n` +
+           `*Based on ${res.analysis_basis}*\n\n` +
+           `_Analyze wallets for free at bioluminescence.xyz_`;
+  } else if (appState.analysisType === 'token' && appState.analysisResult) {
+    const res = appState.analysisResult as TokenAnalysisResult;
+    const top = res.top_originators.slice(0,3).map(o => `• \`${o.wallet.slice(0,4)}..${o.wallet.slice(-4)}\` (${(o.originator_score*100).toFixed(1)}%)`).join('\n');
+    text = `🧬 **PATIENT ZERO Analysis**\n\n` +
+           `**Token:** \`${res.token_analysis.token_address.slice(0,8)}...\`\n` +
+           `**Top Originators:**\n${top}\n\n` +
+           `*Based on ${res.token_analysis.analysis_basis}*\n\n` +
+           `_Analyze tokens for free at bioluminescence.xyz_`;
+  }
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text);
+    btnShareText.textContent = 'Copied!';
+    setTimeout(() => btnShareText.textContent = 'Generate Text Card', 2000);
+  }
+});
+
+btnShareImage.addEventListener('click', () => {
+  const ctx = shareCanvas.getContext('2d');
+  if (!ctx) return;
+  
+  shareCanvas.width = 600;
+  shareCanvas.height = 300;
+  
+  ctx.fillStyle = '#000A14';
+  ctx.fillRect(0, 0, 600, 300);
+  
+  ctx.strokeStyle = 'rgba(0, 255, 200, 0.2)';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, 596, 296);
+
+  ctx.fillStyle = '#00ffff';
+  ctx.font = 'bold 24px monospace';
+  ctx.fillText('PATIENT ZERO // BIOLUMINESCENCE', 30, 50);
+  
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '16px monospace';
+  
+  if (appState.analysisType === 'wallet' && appState.analysisResult) {
+    const res = appState.analysisResult as WalletAnalysisResult;
+    ctx.fillText(`Wallet Analysis: ${res.wallet_snippet}`, 30, 100);
+    ctx.fillStyle = '#00ff80';
+    ctx.fillText(`Class: ${res.classification.replace('_', ' ').toUpperCase()}`, 30, 140);
+    ctx.fillText(`Originator Score: ${(res.originator_score * 100).toFixed(1)}%`, 30, 170);
+    
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '12px monospace';
+    ctx.fillText(`Based on ${res.analysis_basis}`, 30, 250);
+  } else if (appState.analysisType === 'token' && appState.analysisResult) {
+    const res = appState.analysisResult as TokenAnalysisResult;
+    ctx.fillText(`Token Analysis: ${res.token_analysis.token_address.slice(0,8)}...`, 30, 100);
+    
+    ctx.fillStyle = '#00ff80';
+    res.top_originators.slice(0,3).forEach((o, i) => {
+      ctx.fillText(`Top Originator #${i+1}: ${o.wallet.slice(0,6)}... (${(o.originator_score*100).toFixed(1)}%)`, 30, 140 + (i*30));
+    });
+    
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '12px monospace';
+    ctx.fillText(`Based on ${res.token_analysis.analysis_basis}`, 30, 250);
+  }
+  
+  const link = document.createElement('a');
+  link.download = 'patient-zero-analysis.png';
+  link.href = shareCanvas.toDataURL();
+  link.click();
+});
+
+//  Raycaster (Particle Click) ────────────────────────────────
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 

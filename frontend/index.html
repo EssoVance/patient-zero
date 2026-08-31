@@ -255,18 +255,39 @@
     <button id="btn-mode2" class="mode-btn">Mode 2: Analysis</button>
   </div>
 
+  <!-- Mode 2 Specific HUD -->
   <div id="mode2-input" class="hidden">
-    <div class="radio-group">
-      <label><input type="radio" name="analysisType" value="wallet" checked> Wallet</label>
-      <label><input type="radio" name="analysisType" value="token"> Token</label>
+    <div class="api-key-panel">
+        <input type="text" id="api-key-input" placeholder="Enter Helius API Key (Required for Analysis)" spellcheck="false" autocomplete="off" />
+        <div class="helper-text">Get a free key at <a href="https://helius.xyz" target="_blank" style="color:#00ffff;">helius.xyz</a>. Keys are stored locally and never sent to our servers.</div>
+      </div>
+      <div class="radio-group">
+        <label><input type="radio" name="analysisType" value="wallet" checked> Wallet</label>
+        <label><input type="radio" name="analysisType" value="token"> Token</label>
+      </div>
+      <input type="text" id="analysis-input" placeholder="Enter wallet address..." spellcheck="false" autocomplete="off" />
+      <div class="btn-row">
+        <button id="analysis-btn" class="action-btn">Analyze</button>
+        <button id="analysis-reset" class="action-btn">Reset</button>
+      </div>
+      <div id="analysis-error"></div>
     </div>
-    <input type="text" id="analysis-input" placeholder="Enter wallet address..." spellcheck="false" autocomplete="off" />
-    <div class="btn-row">
-      <button id="analysis-btn" class="action-btn">Analyze</button>
-      <button id="analysis-reset" class="action-btn">Reset</button>
+
+    
+      <!-- Data Limitation Notice & Analysis Share Tools (Conditionally Shown) -->
+      <div id="share-card-panel" class="hidden" style="margin-top: 15px; background: rgba(0,255,200,0.05); border: 1px solid rgba(0,255,200,0.2); padding: 10px;">
+        <div style="font-size: 11px; margin-bottom: 10px; color: #00ff80;">
+          ⚠️ Analysis based on limited sample (RPC Constraints)
+        </div>
+        <div class="btn-row">
+          <button id="btn-share-image" class="action-btn" style="flex:1; font-size:10px;">Generate Image Card</button>
+          <button id="btn-share-text" class="action-btn" style="flex:1; font-size:10px;">Generate Text Card</button>
+        </div>
+      </div>
     </div>
-    <div id="analysis-error"></div>
-  </div>
+
+  <!-- Share Canvas (Hidden) -->
+  <canvas id="share-canvas" style="display:none;"></canvas>
 
   <div id="summary-panel" class="hidden"></div>
   

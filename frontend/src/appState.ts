@@ -5,40 +5,38 @@
 export type AppMode = 'ecosystem' | 'analysis';
 export type AnalysisType = 'wallet' | 'token' | null;
 
-export interface WalletLeadershipStats {
-  coins_led: number;
-  top_5_appearances: number;
-  avg_originator_score: number;
-  network_centrality: number;
-  follower_ratio: number;
-  total_pairs_traded: number;
-  avg_time_to_entry_ms: number;
-}
-
 export interface DiscoveryHistoryEntry {
   token_address: string;
   token_name: string;
-  token_symbol: string;
-  position: number;
-  originator_score: number;
-  timestamp: number;
+  entry_time: string;
+  relative_timing: string;
+  estimated_position: string;
 }
 
 export interface WalletAnalysisResult {
   wallet: string;
+  wallet_snippet: string;
+  analysis_basis: string;
+  transaction_count: number;
   classification: string;
-  leadership_stats: WalletLeadershipStats;
-  discovery_history: DiscoveryHistoryEntry[];
+  originator_score: number;
+  confidence: number;
+  leadership_indicators: {
+    early_entry_rate: number;
+    timing_consistency: number;
+    leadership_evidence: string;
+  };
+  recent_activity: DiscoveryHistoryEntry[];
 }
 
 export interface ScoredWallet {
   position: number;
   wallet: string;
-  originator_score: number;
-  follower_score: number;
-  time_from_launch_ms: number;
-  amount_lamports: number;
+  wallet_snippet: string;
   classification: string;
+  originator_score: number;
+  entry_timestamp: string;
+  evidence: string;
 }
 
 export interface TokenAnalysisResult {
@@ -46,11 +44,11 @@ export interface TokenAnalysisResult {
     token_address: string;
     token_name: string;
     token_symbol: string;
-    launch_time: number;
-    total_buyers: number;
+    total_buyers_analyzed: number;
+    analysis_basis: string;
   };
-  leading_wallets: ScoredWallet[];
-  follower_wallets: ScoredWallet[];
+  buyer_sequence: ScoredWallet[];
+  top_originators: { position: number; wallet: string; originator_score: number }[];
 }
 
 export interface WalletBriefing {
@@ -78,6 +76,7 @@ class AppStateManager {
   analysisResult: WalletAnalysisResult | TokenAnalysisResult | null = null;
   isLoading = false;
   error: string | null = null;
+  userApiKey: string = typeof localStorage !== 'undefined' ? (localStorage.getItem('helius_api_key') || '') : '';
 
   private listeners: StateChangeCallback[] = [];
 
@@ -87,6 +86,14 @@ class AppStateManager {
 
   emit(): void {
     this.listeners.forEach((cb) => cb());
+  }
+
+  setApiKey(key: string): void {
+    this.userApiKey = key.trim();
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('helius_api_key', this.userApiKey);
+    }
+    this.emit();
   }
 
   setMode(mode: AppMode): void {
