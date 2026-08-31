@@ -147,8 +147,8 @@ async function main(): Promise<void> {
   console.log(BANNER);
 
   // Start servers
-  startRestServer();
-  wsServer.start();
+  const server = startRestServer();
+  wsServer.start(server);
 
   // Wire Pump.fun monitor
   pumpfunMonitor.on('newPair', (token) => {

@@ -272,8 +272,14 @@ app.get('/api/wallet/:address/briefing', (req: Request, res: Response) => {
   });
 });
 
-export function startRestServer(): void {
-  app.listen(CONFIG.REST_PORT, () => {
-    logger.info(`REST API listening on http://localhost:${CONFIG.REST_PORT}`);
+import * as http from 'http';
+
+export function startRestServer(): http.Server {
+  const server = http.createServer(app);
+  // On Render, we must use the single PORT env var for both HTTP and WS
+  const port = process.env.PORT || CONFIG.REST_PORT;
+  server.listen(port, () => {
+    logger.info(`REST API listening on port ${port}`);
   });
+  return server;
 }

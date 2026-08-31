@@ -55,22 +55,8 @@ class WsClient {
     return isLocal ? 'ws://localhost:8080' : 'wss://patient-zero-backend.onrender.com';
   })();
 
-  constructor() {
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') {
-          console.log('[WsClient] Tab hidden, disconnecting to save resources');
-          this.disconnect();
-        } else if (document.visibilityState === 'visible') {
-          console.log('[WsClient] Tab visible, reconnecting');
-          this.shouldReconnect = true;
-          this.connect();
-        }
-      });
-    }
-  }
-
   connect(): void {
+    this.shouldReconnect = true;
     try {
       this.ws = new WebSocket(this.endpoint);
 

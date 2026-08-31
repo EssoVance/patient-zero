@@ -84,13 +84,23 @@ function updateHUD(state: GraphStateSerialized): void {
   }
 }
 
-// ── Audio unlock ──────────────────────────────────────────────
+// ── Audio unlock & Visibility Hook ────────────────────────────
 document.addEventListener('click', () => {
   if (!audioStarted) {
     audioManager.start();
     audioStarted = true;
   }
 }, { once: true });
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    wsClient.disconnect();
+    if (audioStarted) audioManager.stop();
+  } else if (document.visibilityState === 'visible') {
+    wsClient.connect();
+    if (audioStarted) audioManager.start();
+  }
+});
 
 // ── Mode Switching ────────────────────────────────────────────
 btnMode1.addEventListener('click', () => appState.setMode('ecosystem'));

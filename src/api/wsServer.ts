@@ -7,16 +7,18 @@ import { CONFIG, logger } from '../config';
 // Broadcasts live GraphState snapshots to connected frontends.
 // ============================================================
 
+import * as http from 'http';
+
 class PatientZeroWsServer {
   private wss: WsServer | null = null;
   private clients: Set<WebSocket> = new Set();
   private heartbeatInterval: NodeJS.Timeout | null = null;
 
-  start(): void {
-    this.wss = new WsServer({ port: CONFIG.WS_PORT });
+  start(server: http.Server): void {
+    this.wss = new WsServer({ server });
 
     this.wss.on('listening', () => {
-      logger.info(`WebSocket server listening on ws://localhost:${CONFIG.WS_PORT}`);
+      logger.info(`WebSocket server attached to HTTP server`);
     });
 
     this.wss.on('connection', (ws) => {
