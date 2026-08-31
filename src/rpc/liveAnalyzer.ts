@@ -1,9 +1,13 @@
 import axios from 'axios';
+import * as https from 'https';
 import { logger } from '../config';
 
 // DEX Program IDs to identify swaps
 const PUMPFUN_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
 const RAYDIUM_PROGRAM_ID = '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8';
+
+// Force IPv4 to avoid ENETUNREACH on Render's IPv6-broken network
+const ipv4Agent = new https.Agent({ family: 4 });
 
 // ============================================================
 // PATIENT ZERO - Live Analyzer (Blueprint 3.0)
@@ -20,7 +24,10 @@ export class LiveAnalyzer {
       id: 1,
       method,
       params
-    }, { timeout: 30000 });
+    }, {
+      timeout: 30000,
+      httpsAgent: ipv4Agent   // Force IPv4 — fixes ENETUNREACH on Render
+    });
 
     if (response.data.error) {
       throw new Error(`RPC Error: ${JSON.stringify(response.data.error)}`);
