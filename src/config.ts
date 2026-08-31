@@ -12,6 +12,13 @@ export const CONFIG = {
   RPC_HTTP_ENDPOINT:
     process.env.RPC_HTTP_ENDPOINT || 'https://api.mainnet-beta.solana.com',
 
+  // Rotating HTTP endpoints — comma-separated Helius (or any) RPC URLs.
+  // e.g. RPC_HTTP_ENDPOINTS=https://mainnet.helius-rpc.com/?api-key=AAA,https://mainnet.helius-rpc.com/?api-key=BBB,...
+  // Falls back to RPC_HTTP_ENDPOINT if not set.
+  RPC_HTTP_ENDPOINTS: process.env.RPC_HTTP_ENDPOINTS
+    ? process.env.RPC_HTTP_ENDPOINTS.split(',').map((u) => u.trim()).filter(Boolean)
+    : [process.env.RPC_HTTP_ENDPOINT || 'https://api.mainnet-beta.solana.com'],
+
   // ── On-chain programs ───────────────────────────────────
   PUMPFUN_PROGRAM_ID: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
   RAYDIUM_PROGRAM_ID: '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',

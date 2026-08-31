@@ -5,8 +5,8 @@ import { PumpFunToken } from '../types';
 
 // ============================================================
 // PATIENT ZERO — Pump.fun New Pair Monitor (Solana on-chain)
-// Listens for pump.fun Create events directly on-chain.
-// Throttled to 1 tx fetch per 3s to avoid public RPC rate limits.
+// Listens for pump.fun Create events directly on Solana.
+// Rotates across multiple RPC connections to avoid rate limits.
 // ============================================================
 
 interface PumpFunMonitorEvents {
@@ -15,38 +15,50 @@ interface PumpFunMonitorEvents {
 }
 
 export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
-  private connection: Connection;
+  // One Connection per RPC endpoint — round-robin between them for tx fetches
+  private connections: Connection[];
+  private rrIndex = 0;
+
+  // WS subscription lives on the first connection only
+  private wsConnection: Connection;
+  private subscriptionId: number | null = null;
+
   private seenMints: Set<string> = new Set();
   private activePairs: PumpFunToken[] = [];
-  private subscriptionId: number | null = null;
   private running = false;
 
-  // Throttle queue — process max 1 tx fetch every 3 seconds
+  // Throttle queue — 1 tx fetch per 2s per connection slot
   private queue: string[] = [];
   private processing = false;
 
   constructor() {
     super();
-    this.connection = new Connection(CONFIG.RPC_HTTP_ENDPOINT, {
-      commitment: 'confirmed',
-      // Politely cap concurrent requests
-      httpHeaders: { 'Content-Type': 'application/json' },
-    });
+
+    // Build one Connection per endpoint
+    this.connections = CONFIG.RPC_HTTP_ENDPOINTS.map(
+      (url) => new Connection(url, 'confirmed')
+    );
+
+    // WebSocket subscription always on the first key's connection
+    this.wsConnection = this.connections[0];
+
+    logger.info(
+      `PumpFunMonitor: ${this.connections.length} RPC connection(s) configured`
+    );
   }
 
   start(): void {
     if (this.running) return;
     this.running = true;
-    logger.info('PumpFunMonitor starting (Solana on-chain mode)…');
+    logger.info('PumpFunMonitor starting (Solana on-chain, rotating RPC)…');
 
     try {
       const programId = new PublicKey(CONFIG.PUMPFUN_PROGRAM_ID);
 
-      this.subscriptionId = this.connection.onLogs(
+      this.subscriptionId = this.wsConnection.onLogs(
         programId,
         (logs) => {
           if (!this.running) return;
-          // Only queue genuine Create events; skip duplicates and errors
           if (
             !logs.err &&
             logs.logs.some((l) => l.includes('Instruction: Create')) &&
@@ -59,7 +71,9 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
         'confirmed'
       );
 
-      logger.info(`PumpFunMonitor subscribed to program logs (sub=${this.subscriptionId})`);
+      logger.info(
+        `PumpFunMonitor subscribed (sub=${this.subscriptionId}) — ${this.connections.length} RPC endpoint(s) in rotation`
+      );
     } catch (err) {
       logger.error('PumpFunMonitor failed to start', err);
       this.emit('error', err as Error);
@@ -70,7 +84,9 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
     this.running = false;
     this.queue = [];
     if (this.subscriptionId !== null) {
-      this.connection.removeOnLogsListener(this.subscriptionId).catch(() => {});
+      this.wsConnection
+        .removeOnLogsListener(this.subscriptionId)
+        .catch(() => {});
       this.subscriptionId = null;
     }
     logger.info('PumpFunMonitor stopped');
@@ -80,10 +96,19 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
     return [...this.activePairs];
   }
 
-  /** Drain queue one item at a time, with 3s gap between fetches. */
+  /** Pick the next connection in round-robin order. */
+  private nextConnection(): Connection {
+    const conn = this.connections[this.rrIndex % this.connections.length];
+    this.rrIndex++;
+    return conn;
+  }
+
+  /** Drain queue one item at a time with a small delay between each fetch. */
   private drainQueue(): void {
     if (this.processing || !this.running) return;
     this.processing = true;
+
+    const delay = Math.max(500, Math.floor(2_000 / this.connections.length));
 
     const processNext = async (): Promise<void> => {
       if (!this.running || this.queue.length === 0) {
@@ -91,10 +116,10 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
         return;
       }
 
-      // Keep queue from growing unbounded — drop old entries if > 20
-      if (this.queue.length > 20) {
-        const dropped = this.queue.splice(0, this.queue.length - 20);
-        logger.debug(`Queue overflow — dropped ${dropped.length} old signatures`);
+      // Drop queue overflow (keep newest 30)
+      if (this.queue.length > 30) {
+        const dropped = this.queue.splice(0, this.queue.length - 30).length;
+        logger.debug(`Queue overflow — dropped ${dropped} old signatures`);
       }
 
       const sig = this.queue.shift()!;
@@ -102,8 +127,7 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
         logger.warn('handleNewPair failed', (err as Error).message)
       );
 
-      // Wait 3 seconds before next fetch to respect public RPC rate limits
-      await new Promise<void>((r) => setTimeout(r, 3_000));
+      await new Promise<void>((r) => setTimeout(r, delay));
       await processNext();
     };
 
@@ -114,7 +138,9 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
   }
 
   private async handleNewPair(signature: string): Promise<void> {
-    const tx = await this.connection.getParsedTransaction(signature, {
+    const conn = this.nextConnection();
+
+    const tx = await conn.getParsedTransaction(signature, {
       maxSupportedTransactionVersion: 0,
       commitment: 'confirmed',
     });
@@ -125,7 +151,7 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
     if (accounts.length < 3) return;
 
     // Pump.fun Create instruction account layout:
-    //   [0] mint        ← new token mint address
+    //   [0] mint          ← new token mint address
     //   [1] mintAuthority
     //   [2] bondingCurve
     const mintAddress = accounts[0].pubkey.toBase58();
@@ -134,11 +160,10 @@ export class PumpFunMonitor extends EventEmitter<PumpFunMonitorEvents> {
 
     const bondingCurve = accounts[2]?.pubkey?.toBase58() ?? '';
     const timestamp = tx.blockTime ? tx.blockTime * 1000 : Date.now();
-    const shortMint = mintAddress.slice(0, 8);
 
     const token: PumpFunToken = {
       mint: mintAddress,
-      name: shortMint,
+      name: mintAddress.slice(0, 8),
       symbol: mintAddress.slice(0, 4).toUpperCase(),
       createdTimestamp: timestamp,
       bondingCurve,
