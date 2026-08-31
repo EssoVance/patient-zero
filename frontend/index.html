@@ -108,6 +108,57 @@
       text-transform: uppercase;
       z-index: 10;
     }
+    /* ── Wallet Lookup Panel ── */
+    #lookup-panel {
+      position: fixed; top: 180px; left: 20px;
+      background: rgba(0,10,20,0.75);
+      border: 1px solid rgba(0,255,200,0.2);
+      border-radius: 4px;
+      padding: 14px 18px;
+      font-size: 11px;
+      backdrop-filter: blur(4px);
+      min-width: 280px;
+      z-index: 10;
+    }
+    #lookup-panel h3 {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      color: rgba(0,255,200,0.6);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    #lookup-input {
+      width: 100%;
+      background: rgba(0, 20, 40, 0.5);
+      border: 1px solid rgba(0,255,200,0.3);
+      color: #00ffcc;
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      padding: 6px 8px;
+      border-radius: 2px;
+      margin-bottom: 10px;
+      outline: none;
+    }
+    #lookup-input:focus { border-color: #00ffff; }
+    #lookup-btn {
+      width: 100%;
+      background: rgba(0, 255, 200, 0.1);
+      border: 1px solid rgba(0,255,200,0.4);
+      color: #00ffff;
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      padding: 6px 0;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: all 0.2s;
+    }
+    #lookup-btn:hover { background: rgba(0, 255, 200, 0.2); }
+    #lookup-result { margin-top: 12px; line-height: 1.8; display: none; }
+    .result-row { display: flex; justify-content: space-between; }
+    .score-high { color: #00ffff; text-shadow: 0 0 5px rgba(0,255,255,0.5); }
+    .score-med { color: #00ff80; }
+    .score-low { color: #004d20; }
   </style>
 </head>
 <body>
@@ -126,6 +177,19 @@
     <div><span class="stat-label">Cascade edges:  </span><span class="stat-value" id="stat-edges">0</span></div>
     <div style="margin-top:8px;"><span class="stat-label">Top originator:</span></div>
     <div style="font-size:9px;word-break:break-all;color:#00ffff;" id="stat-top-wallet">—</div>
+  </div>
+
+  <div id="lookup-panel">
+    <h3>Wallet Analysis</h3>
+    <input type="text" id="lookup-input" placeholder="Enter wallet address..." spellcheck="false" />
+    <button id="lookup-btn">Analyze Identity</button>
+    
+    <div id="lookup-result">
+      <div class="result-row"><span class="stat-label">Classification:</span><span id="lookup-class" style="font-weight:bold;">—</span></div>
+      <div class="result-row"><span class="stat-label">Originator Score:</span><span id="lookup-orig-score">—</span></div>
+      <div class="result-row"><span class="stat-label">Follower Score:</span><span id="lookup-foll-score">—</span></div>
+      <div class="result-row"><span class="stat-label">Pairs Traded:</span><span id="lookup-pairs">—</span></div>
+    </div>
   </div>
 
   <div id="legend">

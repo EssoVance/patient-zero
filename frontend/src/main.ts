@@ -72,6 +72,65 @@ document.addEventListener(
   { once: true }
 );
 
+// ── Wallet Lookup Logic ────────────────────────────────────────
+const lookupBtn = document.getElementById('lookup-btn');
+const lookupInput = document.getElementById('lookup-input') as HTMLInputElement;
+const lookupResult = document.getElementById('lookup-result');
+const valClass = document.getElementById('lookup-class');
+const valOrig = document.getElementById('lookup-orig-score');
+const valFoll = document.getElementById('lookup-foll-score');
+const valPairs = document.getElementById('lookup-pairs');
+
+if (lookupBtn && lookupInput && lookupResult && valClass && valOrig && valFoll && valPairs) {
+  lookupBtn.addEventListener('click', () => {
+    const address = lookupInput.value.trim();
+    if (!address || !latestState) return;
+
+    // Find wallet in state (nodes is Array<[address, WalletNode]>)
+    const walletData = latestState.nodes.find(([addr]) => addr === address);
+
+    if (walletData) {
+      const node = walletData[1];
+      const oScore = node.originatorScore;
+      const fScore = node.followerScore;
+      const totalPairs = node.timingPattern.totalPairs;
+
+      // Classification based on thresholds
+      let classification = 'Follower / Copycat';
+      let cssClass = 'score-low';
+      
+      if (oScore > 0.7) {
+        classification = 'Genuine Originator';
+        cssClass = 'score-high';
+      } else if (oScore > 0.4) {
+        classification = 'Mixed / Neutral';
+        cssClass = 'score-med';
+      }
+
+      valClass.textContent = classification;
+      valClass.className = cssClass;
+      valOrig.textContent = (oScore * 100).toFixed(1) + '%';
+      valOrig.className = cssClass;
+      valFoll.textContent = (fScore * 100).toFixed(1) + '%';
+      valPairs.textContent = totalPairs.toString();
+      
+      lookupResult.style.display = 'block';
+    } else {
+      valClass.textContent = 'Not found in active memory';
+      valClass.className = 'score-low';
+      valOrig.textContent = '—';
+      valFoll.textContent = '—';
+      valPairs.textContent = '—';
+      lookupResult.style.display = 'block';
+    }
+  });
+
+  // Allow enter key to trigger lookup
+  lookupInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') lookupBtn.click();
+  });
+}
+
 // ── Animation Loop ─────────────────────────────────────────────
 function animate(): void {
   requestAnimationFrame(animate);
