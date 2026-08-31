@@ -1,13 +1,17 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 // ============================================================
-// PATIENT ZERO — Bioluminescent Ocean Scene
+// PATIENT ZERO - Bioluminescent Ocean Scene
 // ============================================================
 
 export class BioluminescentScene {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
+  private composer: EffectComposer;
   private orbitAngle = 0;
   private orbitRadius = 150;
   private ambientParticles: THREE.Points | null = null;
@@ -16,8 +20,8 @@ export class BioluminescentScene {
   constructor(container: HTMLElement) {
     // Scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x020408);
-    this.scene.fog = new THREE.FogExp2(0x010206, 0.012);
+    this.scene.background = new THREE.Color(0x010204);
+    this.scene.fog = new THREE.FogExp2(0x010204, 0.008);
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(
@@ -30,16 +34,30 @@ export class BioluminescentScene {
     this.camera.lookAt(0, 0, 0);
 
     // Renderer
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.toneMapping = THREE.ReinhardToneMapping;
     container.appendChild(this.renderer.domElement);
 
+    // Post-processing Bloom
+    const renderScene = new RenderPass(this.scene, this.camera);
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      2.5,  // strength
+      0.5,  // radius
+      0.1   // threshold
+    );
+
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(renderScene);
+    this.composer.addPass(bloomPass);
+
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0x001133, 0.8);
+    const ambientLight = new THREE.AmbientLight(0x001133, 1.5);
     this.scene.add(ambientLight);
 
-    const pointLight = new THREE.PointLight(0x0044ff, 0.5, 300);
+    const pointLight = new THREE.PointLight(0x00aaff, 1.0, 400);
     pointLight.position.set(0, 80, 0);
     this.scene.add(pointLight);
 
@@ -51,7 +69,7 @@ export class BioluminescentScene {
   }
 
   private createAmbientOcean(): void {
-    const count = 600;
+    const count = 800;
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
 
@@ -59,10 +77,10 @@ export class BioluminescentScene {
       positions[i * 3]     = (Math.random() - 0.5) * 400;
       positions[i * 3 + 1] = (Math.random() - 0.5) * 200;
       positions[i * 3 + 2] = (Math.random() - 0.5) * 400;
-      // Dim blue-green tint
+      // Brighter blue-green tint
       colors[i * 3]     = 0;
-      colors[i * 3 + 1] = 0.05 + Math.random() * 0.08;
-      colors[i * 3 + 2] = 0.1  + Math.random() * 0.15;
+      colors[i * 3 + 1] = 0.15 + Math.random() * 0.15;
+      colors[i * 3 + 2] = 0.2  + Math.random() * 0.25;
     }
 
     const geo = new THREE.BufferGeometry();
@@ -70,10 +88,11 @@ export class BioluminescentScene {
     geo.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
 
     const mat = new THREE.PointsMaterial({
-      size: 0.6,
+      size: 1.2,
       vertexColors: true,
       transparent: true,
-      opacity: 0.4,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending
     });
 
     this.ambientParticles = new THREE.Points(geo, mat);
@@ -93,7 +112,7 @@ export class BioluminescentScene {
     if (this.ambientParticles) {
       const positions = this.ambientParticles.geometry.attributes.position;
       for (let i = 0; i < positions.count; i++) {
-        positions.setY(i, positions.getY(i) + delta * 0.5);
+        positions.setY(i, positions.getY(i) + delta * 1.5);
         if (positions.getY(i) > 100) positions.setY(i, -100);
       }
       positions.needsUpdate = true;
@@ -101,7 +120,7 @@ export class BioluminescentScene {
   }
 
   render(): void {
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
   }
 
   getDelta(): number {
@@ -124,5 +143,6 @@ export class BioluminescentScene {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.composer.setSize(window.innerWidth, window.innerHeight);
   }
 }

@@ -7,9 +7,10 @@ import { GraphStateSerialized, WalletNodeData } from './wsClient';
 // ============================================================
 
 // Color thresholds match the blueprint
+// Color thresholds match the blueprint
 const COLOR_ORIGINATOR = new THREE.Color(0x00ffff); // bright cyan — score > 0.7
-const COLOR_MIXED       = new THREE.Color(0x00ff80); // medium green — 0.4–0.7
-const COLOR_FOLLOWER    = new THREE.Color(0x004d20); // dim green — < 0.4
+const COLOR_MIXED       = new THREE.Color(0x00ffa8); // medium green-cyan
+const COLOR_FOLLOWER    = new THREE.Color(0x008f3c); // brighter dim green
 const COLOR_FLASH       = new THREE.Color(0xffffff); // white flash — new pair
 
 function scoreToColor(score: number): THREE.Color {
@@ -19,7 +20,7 @@ function scoreToColor(score: number): THREE.Color {
 }
 
 function scoreToRadius(score: number): number {
-  return 0.6 + score * 2.2;
+  return 1.2 + score * 3.5;
 }
 
 /** Stable 3D position from wallet address string */

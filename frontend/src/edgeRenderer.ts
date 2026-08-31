@@ -24,7 +24,7 @@ export class EdgeRenderer {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
-    this.dotGeo = new THREE.SphereGeometry(0.4, 6, 6);
+    this.dotGeo = new THREE.SphereGeometry(1.0, 8, 8);
   }
 
   update(
@@ -47,7 +47,7 @@ export class EdgeRenderer {
       activeKeys.add(key);
 
       const color = edge.edgeType === 'origin' ? COLOR_ORIGIN : COLOR_FOLLOWER;
-      const opacity = edge.edgeType === 'origin' ? 0.5 : 0.2;
+      const opacity = edge.edgeType === 'origin' ? 0.9 : 0.4;
 
       if (!this.edges.has(key)) {
         // Create line
@@ -60,6 +60,7 @@ export class EdgeRenderer {
           transparent: true,
           opacity,
           blending: THREE.AdditiveBlending,
+          linewidth: 2, // Note: standard WebGL ignores linewidth > 1 on many platforms, but we'll try
         });
         const line = new THREE.Line(geo, mat);
 
@@ -67,7 +68,7 @@ export class EdgeRenderer {
         const dotMat = new THREE.MeshBasicMaterial({
           color: COLOR_ORIGIN,
           transparent: true,
-          opacity: 0.9,
+          opacity: 1.0,
         });
         const dot = new THREE.Mesh(this.dotGeo, dotMat);
 
