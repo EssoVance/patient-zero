@@ -225,21 +225,26 @@ export class LiveAnalyzer {
       const buyerSequence: any[] = [];
       const topOriginators: any[] = [];
 
-      for (let i = 0; i < topHolders.length; i++) {
-        const acc = topHolders[i];
-        let ownerAddress = acc.address;
+      // Optimize: Use getMultipleAccounts instead of sequential getAccountInfo (solves freezing/timeout)
+      const addressesToFetch = topHolders.map((acc: any) => acc.address);
+      let accountOwners: string[] = [];
+      
+      try {
+        const accInfosResult = await this.rpc(apiKey, 'getMultipleAccounts', [
+          addressesToFetch,
+          { encoding: 'jsonParsed', commitment: 'confirmed' }
+        ]);
+        
+        accountOwners = accInfosResult?.value?.map((info: any, idx: number) => {
+          return info?.data?.parsed?.info?.owner || addressesToFetch[idx];
+        }) || addressesToFetch;
+      } catch (_e) {
+        // Fallback if getMultipleAccounts fails
+        accountOwners = addressesToFetch;
+      }
 
-        // getAccountInfo with jsonParsed encoding to resolve token account owner — standard RPC ✓
-        try {
-          const accInfoResult = await this.rpc(apiKey, 'getAccountInfo', [
-            acc.address,
-            { encoding: 'jsonParsed', commitment: 'confirmed' }
-          ]);
-          const owner = accInfoResult?.value?.data?.parsed?.info?.owner;
-          if (owner) ownerAddress = owner;
-        } catch (_e) {
-          // Keep fallback to token account address
-        }
+      for (let i = 0; i < topHolders.length; i++) {
+        const ownerAddress = accountOwners[i];
 
         const score = Math.max(0.1, 0.95 - i * 0.08);
         let classification = 'likely_follower';

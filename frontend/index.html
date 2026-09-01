@@ -174,10 +174,19 @@
       border-radius: 4px;
       padding: 16px;
       width: 320px;
+      max-height: calc(100vh - 220px);
+      overflow-y: auto;
+      overflow-x: hidden;
       backdrop-filter: blur(6px);
       z-index: 10;
       transition: opacity 0.3s;
     }
+    
+    /* Scrollbar styling for Mode 2 input */
+    #mode2-input::-webkit-scrollbar { width: 4px; }
+    #mode2-input::-webkit-scrollbar-track { background: transparent; }
+    #mode2-input::-webkit-scrollbar-thumb { background: rgba(0,255,200,0.3); border-radius: 2px; }
+    #mode2-input::-webkit-scrollbar-thumb:hover { background: rgba(0,255,200,0.6); }
     #mode2-input.hidden { display: none; }
     .radio-group {
       display: flex; gap: 16px; margin-bottom: 12px;
@@ -261,10 +270,37 @@
       position: absolute; top: 8px; right: 8px;
       background: none; border: none; color: #00ffff; cursor: pointer; font-size: 12px;
     }
-    
+    /* ── Mobile Blocker ── */
+    #mobile-blocker {
+      display: none;
+      position: fixed; inset: 0;
+      background: #020408;
+      z-index: 9999;
+      color: #00ffcc;
+      font-family: 'Space Mono', monospace;
+      text-align: center;
+      padding: 40px 20px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #mobile-blocker h1 { font-size: 16px; margin-bottom: 16px; letter-spacing: 0.1em; color: #ff3366; }
+    #mobile-blocker p { font-size: 11px; line-height: 1.6; color: rgba(0,255,200,0.8); }
+
+    @media (max-width: 768px) {
+      #mobile-blocker { display: flex; }
+      /* Optionally hide everything else so it doesn't run/render in background */
+      #loading, #canvas-container, #hud-stats, #mode-toggle, #mode2-input, #summary-panel, #legend, #graph-legend { display: none !important; }
+    }
   </style>
 </head>
 <body>
+  
+  <div id="mobile-blocker">
+    <h1>⚠️ MOBILE NOT SUPPORTED</h1>
+    <p>Patient Zero // BIOLUMINESCENCE requires a large screen space for the 3D ecosystem graph and analysis data.</p>
+    <p style="margin-top:20px;">Please access this tool from a Desktop or Laptop device.</p>
+  </div>
 
   <div id="loading">
     <div class="spinner"></div>
@@ -292,7 +328,7 @@
   <div id="mode2-input" class="hidden">
     <div class="api-key-panel">
         <input type="text" id="api-key-input" placeholder="Enter Helius API Key (Required for Analysis)" spellcheck="false" autocomplete="off" />
-        <div class="helper-text">Get a free key at <a href="https://helius.xyz" target="_blank" style="color:#00ffff;">helius.xyz</a>. Keys are stored locally and never sent to our servers.</div>
+        <div class="helper-text">Get a free key at <a href="https://helius.dev" target="_blank" style="color:#00ffff;">helius.dev</a>. Keys are stored locally and never sent to our servers.</div>
       </div>
       <div class="radio-group">
         <label><input type="radio" name="analysisType" value="wallet" checked> Wallet</label>
