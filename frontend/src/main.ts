@@ -50,6 +50,7 @@ const analysisBtn = document.getElementById('analysis-btn') as HTMLButtonElement
 const analysisReset = document.getElementById('analysis-reset') as HTMLButtonElement;
 const analysisError = document.getElementById('analysis-error') as HTMLDivElement;
 const validationMsg = document.getElementById('addr-validation-msg') as HTMLDivElement;
+const typeIndicator = document.getElementById('addr-type-indicator') as HTMLDivElement;
 
 const apiKeyInput = document.getElementById('api-key-input') as HTMLInputElement;
 const depthRadios = document.querySelectorAll('input[name="analysisDepth"]');
@@ -204,14 +205,74 @@ appState.on(() => {
   }
 });
 
+
 // ── Mode 2 Input Form ─────────────────────────────────────────
+
+// SPL Token Program IDs — if account owner matches, it's a mint (token)
+const TOKEN_PROGRAMS = new Set([
+  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',  // SPL Token v1
+  'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',  // Token-2022
+]);
+
+let detectDebounce: ReturnType<typeof setTimeout> | null = null;
+
+async function detectOnChainType(address: string): Promise<void> {
+  const apiKey = appState.userApiKey;
+  if (!apiKey) return; // no key, skip
+
+  typeIndicator.textContent = '🔍 Detecting address type...';
+  typeIndicator.style.display = 'block';
+  typeIndicator.style.color = 'rgba(0,255,200,0.5)';
+
+  try {
+    const resp = await fetch(`https://mainnet.helius-rpc.com/?api-key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1,
+        method: 'getAccountInfo',
+        params: [address, { encoding: 'base64' }]
+      })
+    });
+    if (!resp.ok) { typeIndicator.style.display = 'none'; return; }
+    const json = await resp.json();
+    const owner: string | undefined = json?.result?.value?.owner;
+
+    if (!owner) {
+      typeIndicator.textContent = '⚠️ Address not found on-chain';
+      typeIndicator.style.color = 'rgba(255,165,0,0.8)';
+      return;
+    }
+
+    const isToken = TOKEN_PROGRAMS.has(owner);
+    const typeRadios = document.getElementsByName('analysisType');
+    for (let i = 0; i < typeRadios.length; i++) {
+      const r = typeRadios[i] as HTMLInputElement;
+      r.checked = isToken ? r.value === 'token' : r.value === 'wallet';
+    }
+
+    typeIndicator.textContent = isToken
+      ? '✓ Token Mint detected — switched to Token mode'
+      : '✓ Wallet detected — switched to Wallet mode';
+    typeIndicator.style.color = isToken ? '#00ffcc' : '#00ff80';
+  } catch {
+    // Network error — silently ignore, let user choose manually
+    typeIndicator.style.display = 'none';
+  }
+}
+
 analysisInput.addEventListener('input', () => {
   const address = analysisInput.value.trim();
+
+  // Clear type indicator when input changes
+  typeIndicator.style.display = 'none';
+
   if (!address) {
     validationMsg.style.display = 'none';
     analysisBtn.disabled = false;
     return;
   }
+
   const result = validateSolanaAddress(address);
   if (!result.valid) {
     validationMsg.textContent = result.error || 'Invalid address';
@@ -220,6 +281,10 @@ analysisInput.addEventListener('input', () => {
   } else {
     validationMsg.style.display = 'none';
     analysisBtn.disabled = false;
+
+    // Debounce on-chain detection: wait 700ms after user stops typing
+    if (detectDebounce) clearTimeout(detectDebounce);
+    detectDebounce = setTimeout(() => detectOnChainType(address), 700);
   }
 });
 
@@ -298,6 +363,7 @@ analysisBtn.addEventListener('click', async () => {
 analysisReset.addEventListener('click', () => {
   analysisInput.value = '';
   validationMsg.style.display = 'none';
+  typeIndicator.style.display = 'none';
   analysisBtn.disabled = false;
   relationshipGraph.clear();
   walletGraphControls.style.display = 'none';
