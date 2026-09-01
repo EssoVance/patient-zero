@@ -96,6 +96,41 @@ wsClient.onUpdate((state) => {
 
 wsClient.connect();
 
+// ── Blueprint 7.0: Copy-to-Clipboard Utilities ────────────────
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showToast(msg: string): void {
+  // Remove existing toast if any
+  document.querySelector('.copy-toast')?.remove();
+  if (toastTimer) clearTimeout(toastTimer);
+
+  const toast = document.createElement('div');
+  toast.className = 'copy-toast';
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+
+  toastTimer = setTimeout(() => { toast.remove(); toastTimer = null; }, 1800);
+}
+
+async function copyAddr(address: string): Promise<void> {
+  if (!address) { showToast('Nothing to copy'); return; }
+  try {
+    await navigator.clipboard.writeText(address);
+    showToast('✓ Copied!');
+  } catch {
+    showToast('Copy failed — select manually');
+  }
+}
+
+// Global delegated click handler for any .copyable-address element
+document.addEventListener('click', (e) => {
+  const el = (e.target as HTMLElement).closest<HTMLElement>('.copyable-address');
+  if (el) {
+    const addr = el.dataset.addr || el.textContent?.trim() || '';
+    copyAddr(addr);
+  }
+});
+
 // ── HUD Update ────────────────────────────────────────────────
 function updateHUD(state: GraphStateSerialized): void {
   const el = (id: string) => document.getElementById(id);
@@ -110,7 +145,7 @@ function updateHUD(state: GraphStateSerialized): void {
 
   const top = state.stats.topOriginators[0];
   if (topWallet && top) {
-    topWallet.textContent = `${top.address.slice(0, 8)}…${top.address.slice(-4)} (${(top.score * 100).toFixed(1)}%)`;
+    topWallet.innerHTML = `<span class="copyable-address" data-addr="${top.address}" title="Click to copy full address">${top.address.slice(0,8)}…${top.address.slice(-4)} (${(top.score*100).toFixed(1)}%) <span class="copy-icon">📋</span></span>`;
   }
 }
 
@@ -407,6 +442,7 @@ function renderWalletSummary(res: WalletAnalysisResult): void {
 
   summaryPanel.innerHTML = `
     <h3>Wallet Leadership Summary</h3>
+    <div class="summary-stat"><span>Wallet:</span> <span class="copyable-address" data-addr="${(res as any).wallet || ''}" title="Click to copy full address" style="color:#00ffff;font-size:9px;">${res.wallet_snippet} <span class="copy-icon">📋</span></span></div>
     <div class="summary-stat"><span>Classification:</span> <span style="color:#00ffff">${res.classification.replace('_', ' ').toUpperCase()}</span></div>
     <div class="summary-stat"><span>Transactions Analyzed:</span> <span>${res.transaction_count}</span></div>
     <div class="summary-stat"><span>Originator Score:</span> <span>${(res.originator_score * 100).toFixed(1)}%</span></div>
@@ -427,12 +463,12 @@ function renderTokenSummary(res: TokenAnalysisResult): void {
   const topThree = res.buyer_sequence.slice(0, 3);
   const allHolders = res.buyer_sequence;
 
-  const topHoldersHtml = topThree.map((b, i) => {
+  const topHoldersHtml = topThree.map((b, _i) => {
     const color = b.originator_score >= 0.7 ? '#00ffff' : b.originator_score >= 0.4 ? '#00ff80' : 'rgba(0,255,200,0.5)';
     const badge = b.originator_score >= 0.7 ? '🏆' : b.originator_score >= 0.4 ? '🔶' : '🔹';
     return `
     <div class="history-item">
-      <div>${badge} <span style="color:${color}">#${b.position} ${b.wallet_snippet}</span></div>
+      <div>${badge} <span class="copyable-address" data-addr="${b.wallet}" title="Click to copy" style="color:${color}">#${b.position} ${b.wallet_snippet} <span class="copy-icon">📋</span></span></div>
       <div style="color:rgba(0,255,200,0.6);font-size:9px;">Score: ${(b.originator_score * 100).toFixed(1)}% · ${b.classification.replace('_',' ').toUpperCase()} · ${b.evidence.replace('_',' ')}</div>
     </div>`;
   }).join('');
@@ -440,7 +476,7 @@ function renderTokenSummary(res: TokenAnalysisResult): void {
   const allHoldersHtml = allHolders.slice(3).map(b => {
     const color = b.originator_score >= 0.4 ? '#00ff80' : 'rgba(0,255,200,0.5)';
     return `<div class="history-item">
-      <div style="color:${color}">#${b.position} ${b.wallet_snippet} — ${(b.originator_score * 100).toFixed(1)}%</div>
+      <div style="color:${color}">#${b.position} <span class="copyable-address" data-addr="${b.wallet}" title="Click to copy" style="color:${color}">${b.wallet_snippet} <span class="copy-icon">📋</span></span> — ${(b.originator_score * 100).toFixed(1)}%</div>
     </div>`;
   }).join('');
 
@@ -453,7 +489,7 @@ function renderTokenSummary(res: TokenAnalysisResult): void {
 
   summaryPanel.innerHTML = `
     <h3>Token Analysis</h3>
-    <div class="summary-stat"><span>Token Address:</span> <span style="color:#00ffff;font-size:9px">${ta.token_address.slice(0,12)}...${ta.token_address.slice(-6)}</span></div>
+    <div class="summary-stat"><span>Token Address:</span> <span class="copyable-address" data-addr="${ta.token_address}" title="Click to copy full address" style="color:#00ffff;font-size:9px;">${ta.token_address.slice(0,12)}...${ta.token_address.slice(-6)} <span class="copy-icon">📋</span></span></div>
     <div class="summary-stat"><span>Holders Analyzed:</span> <span>${ta.total_buyers_analyzed}</span></div>
     <div class="summary-stat"><span>Analysis Basis:</span> <span style="text-transform:uppercase">${ta.analysis_basis.replace(/_/g,' ')}</span></div>
     ${marketHtml}
@@ -866,8 +902,9 @@ function showGraphNodeBriefing(wallet: string, interactionCount: number, strengt
 
   briefingContent.innerHTML = `
     <div style="font-size:11px;color:rgba(0,255,200,0.5);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">Graph Node</div>
-    <div style="font-size:13px;color:#00ffff;margin-bottom:4px;font-weight:bold;word-break:break-all;">${wallet}</div>
-    <div style="font-size:10px;color:rgba(0,255,200,0.6);margin-bottom:12px;">${wallet.slice(0, 8)}...${wallet.slice(-4)}</div>
+    <div class="copyable-address" data-addr="${wallet}" title="Click to copy full address" style="font-size:12px;color:#00ffff;margin-bottom:4px;font-weight:bold;">
+      ${wallet.slice(0,8)}...${wallet.slice(-4)} <span class="copy-icon">📋</span>
+    </div>
 
     <div style="font-size:11px;margin-bottom:4px;display:flex;justify-content:space-between;">
       <span style="color:rgba(0,255,200,0.6)">Relationship:</span>
