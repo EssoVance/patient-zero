@@ -315,9 +315,8 @@
         <button id="analysis-reset" class="action-btn">Reset</button>
       </div>
       <div id="analysis-error"></div>
-    </div>
-
-        <!-- Data Limitation Notice & Analysis Share Tools (Conditionally Shown) -->
+      
+      <!-- Data Limitation Notice & Analysis Share Tools (Conditionally Shown) -->
       <div id="share-card-panel" class="hidden" style="margin-top: 15px; background: rgba(0,255,200,0.05); border: 1px solid rgba(0,255,200,0.2); padding: 10px;">
         <div style="font-size: 11px; margin-bottom: 10px; color: #00ff80;">
           💡 Analysis complete.
@@ -327,17 +326,19 @@
           <button id="btn-share-text" class="action-btn" style="flex:1; font-size:10px;">Generate Text Card</button>
         </div>
       </div>
-    </div>
+
+      <!-- Graph Controls -->
+      <div id="wallet-graph-controls" style="display:none; margin-top:15px; background:rgba(0,25,20,0.8); border:1px solid #00ff80; padding:12px; width:100%; box-sizing:border-box;">
+        <button id="btn-explore-graph" class="action-btn" style="width:100%;font-size:12px;margin-bottom:6px;">🔗 Explore Relationships</button>
+        <button id="btn-close-graph" class="action-btn" style="width:100%;font-size:12px;display:none;">✕ Close Graph</button>
+      </div>
+      
+    </div> <!-- End mode2-input -->
 
   <!-- Share Canvas (Hidden) -->
   <canvas id="share-canvas" style="display:none;"></canvas>
 
   <div id="summary-panel" class="hidden"></div>
-  
-  <div id="wallet-graph-controls" style="display:none; position:fixed; top:400px; left:20px; width:312px; background:rgba(0,25,20,0.8); border:1px solid #00ff80; padding:12px; z-index:20;">
-    <button id="btn-explore-graph" class="action-btn" style="width:100%;font-size:12px;margin-bottom:6px;">🔗 Explore Relationships</button>
-    <button id="btn-close-graph" class="action-btn" style="width:100%;font-size:12px;display:none;">✕ Close Graph</button>
-  </div>
   
   <div id="briefing-panel" class="hidden">
     <button id="briefing-close">✕</button>

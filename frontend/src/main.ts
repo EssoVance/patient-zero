@@ -179,16 +179,19 @@ appState.on(() => {
       summaryPanel.classList.remove('hidden');
       shareCardPanel.classList.remove('hidden');
       walletGraphControls.style.display = 'block';
+      graphLegend.classList.add('hidden');
       mode2Scene.clear();
     } else if (appState.analysisType === 'token' && appState.analysisResult) {
       mode2Scene.renderTokenAnalysis(appState.analysisResult as TokenAnalysisResult);
       summaryPanel.classList.add('hidden');
       shareCardPanel.classList.remove('hidden');
       walletGraphControls.style.display = 'none';
+      graphLegend.classList.add('hidden');
     } else {
       summaryPanel.classList.add('hidden');
       shareCardPanel.classList.add('hidden');
       walletGraphControls.style.display = 'none';
+      graphLegend.classList.add('hidden');
       mode2Scene.clear();
     }
   }
@@ -368,6 +371,7 @@ analysisReset.addEventListener('click', () => {
   analysisBtn.disabled = false;
   relationshipGraph.clear();
   walletGraphControls.style.display = 'none';
+  graphLegend.classList.add('hidden');
   appState.reset();
 });
 
