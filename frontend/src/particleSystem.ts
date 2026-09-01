@@ -100,6 +100,7 @@ export class ParticleSystem {
         });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.copy(targetPos);
+        mesh.userData.wallet = address;  // For Mode 1 raycaster
 
         // Glow sprite
         const glowMat = new THREE.SpriteMaterial({
@@ -176,6 +177,10 @@ export class ParticleSystem {
     mesh.position.copy(position ?? new THREE.Vector3(0, 0, 0));
     this.scene.add(mesh);
     this.flashes.push({ mesh, age: 0 });
+  }
+
+  getMeshes(): THREE.Mesh[] {
+    return [...this.particles.values()].map(p => p.mesh);
   }
 
   getPositions(): Map<string, THREE.Vector3> {

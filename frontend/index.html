@@ -248,6 +248,7 @@
     <div><span class="stat-label">Cascade edges:  </span><span class="stat-value" id="stat-edges">0</span></div>
     <div style="margin-top:8px;"><span class="stat-label">Top originator:</span></div>
     <div style="font-size:9px;word-break:break-all;color:#00ffff;" id="stat-top-wallet">—</div>
+    <div style="font-size:9px;color:rgba(0,255,200,0.4);margin-top:6px;">↑ Click any node for details</div>
   </div>
 
   <div id="mode-toggle">
@@ -266,6 +267,7 @@
         <label><input type="radio" name="analysisType" value="token"> Token</label>
       </div>
       <input type="text" id="analysis-input" placeholder="Enter wallet address..." spellcheck="false" autocomplete="off" />
+      <div id="addr-validation-msg" style="font-size:10px;color:#ff6666;margin:4px 0 6px;min-height:14px;display:none;"></div>
       <div class="btn-row">
         <button id="analysis-btn" class="action-btn">Analyze</button>
         <button id="analysis-reset" class="action-btn">Reset</button>
@@ -291,9 +293,22 @@
 
   <div id="summary-panel" class="hidden"></div>
   
+  <div id="wallet-graph-controls" style="display:none; position:fixed; top:400px; left:20px; width:312px; background:rgba(0,25,20,0.8); border:1px solid #00ff80; padding:12px; z-index:20;">
+    <button id="btn-explore-graph" class="action-btn" style="width:100%;font-size:12px;margin-bottom:6px;">🔗 Explore Relationships</button>
+    <button id="btn-close-graph" class="action-btn" style="width:100%;font-size:12px;display:none;">✕ Close Graph</button>
+  </div>
+  
   <div id="briefing-panel" class="hidden">
     <button id="briefing-close">✕</button>
     <div id="briefing-content"></div>
+  </div>
+
+  <!-- Relationship Graph Legend -->
+  <div id="graph-legend" class="hidden" style="position:fixed;bottom:60px;right:20px;background:rgba(0,10,20,0.85);border:1px solid rgba(0,255,200,0.2);padding:10px 14px;font-family:monospace;font-size:10px;color:#00ffcc;z-index:15;">
+    <div style="font-weight:bold;margin-bottom:6px;">Relationship Strength</div>
+    <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#00ffff;margin-right:6px;"></span>Strong (≥5 interactions)</div>
+    <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#00ff80;margin-right:6px;"></span>Moderate (2–4)</div>
+    <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#004d20;margin-right:6px;"></span>Weak (1)</div>
   </div>
 
   <div id="legend">

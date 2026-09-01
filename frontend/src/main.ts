@@ -3,9 +3,11 @@ import { BioluminescentScene } from './scene';
 import { ParticleSystem } from './particleSystem';
 import { EdgeRenderer } from './edgeRenderer';
 import { Mode2Scene } from './mode2Scene';
+import { RelationshipGraph, RelationshipData } from './relationshipGraph';
 import { audioManager } from './audioManager';
 import { wsClient, GraphStateSerialized } from './wsClient';
 import { appState, TokenAnalysisResult, WalletAnalysisResult, WalletBriefing } from './appState';
+import { validateSolanaAddress } from './validation';
 
 // ============================================================
 // PATIENT ZERO — Main Entry Point & UI Controller
@@ -22,6 +24,7 @@ const camera = biolumScene.getCamera();
 const particleSystem = new ParticleSystem(threeScene);
 const edgeRenderer   = new EdgeRenderer(threeScene);
 const mode2Scene     = new Mode2Scene(threeScene);
+const relationshipGraph = new RelationshipGraph(threeScene, camera);
 
 // State
 let latestState: GraphStateSerialized | null = null;
@@ -46,12 +49,17 @@ const analysisInput = document.getElementById('analysis-input') as HTMLInputElem
 const analysisBtn = document.getElementById('analysis-btn') as HTMLButtonElement;
 const analysisReset = document.getElementById('analysis-reset') as HTMLButtonElement;
 const analysisError = document.getElementById('analysis-error') as HTMLDivElement;
+const validationMsg = document.getElementById('addr-validation-msg') as HTMLDivElement;
 
 const apiKeyInput = document.getElementById('api-key-input') as HTMLInputElement;
 const shareCardPanel = document.getElementById('share-card-panel') as HTMLElement;
 const btnShareImage = document.getElementById('btn-share-image') as HTMLButtonElement;
 const btnShareText = document.getElementById('btn-share-text') as HTMLButtonElement;
 const shareCanvas = document.getElementById('share-canvas') as HTMLCanvasElement;
+
+const btnExploreGraph = document.getElementById('btn-explore-graph') as HTMLButtonElement;
+const btnCloseGraph = document.getElementById('btn-close-graph') as HTMLButtonElement;
+const graphLegend = document.getElementById('graph-legend') as HTMLDivElement;
 
 if (appState.userApiKey) {
   apiKeyInput.value = appState.userApiKey;
@@ -132,6 +140,7 @@ appState.on(() => {
     shareCardPanel.classList.add('hidden');
     summaryPanel.classList.add('hidden');
     briefingPanel.classList.add('hidden');
+    walletGraphControls.style.display = 'none';
     analysisError.style.display = 'none';
 
     particleSystem.setVisible(true);
@@ -149,14 +158,17 @@ appState.on(() => {
       renderWalletSummary(appState.analysisResult as WalletAnalysisResult);
       summaryPanel.classList.remove('hidden');
       shareCardPanel.classList.remove('hidden');
+      walletGraphControls.style.display = 'block';
       mode2Scene.clear();
     } else if (appState.analysisType === 'token' && appState.analysisResult) {
       mode2Scene.renderTokenAnalysis(appState.analysisResult as TokenAnalysisResult);
       summaryPanel.classList.add('hidden');
       shareCardPanel.classList.remove('hidden');
+      walletGraphControls.style.display = 'none';
     } else {
       summaryPanel.classList.add('hidden');
       shareCardPanel.classList.add('hidden');
+      walletGraphControls.style.display = 'none';
       mode2Scene.clear();
     }
   }
@@ -175,9 +187,34 @@ appState.on(() => {
 });
 
 // ── Mode 2 Input Form ─────────────────────────────────────────
+analysisInput.addEventListener('input', () => {
+  const address = analysisInput.value.trim();
+  if (!address) {
+    validationMsg.style.display = 'none';
+    analysisBtn.disabled = false;
+    return;
+  }
+  const result = validateSolanaAddress(address);
+  if (!result.valid) {
+    validationMsg.textContent = result.error || 'Invalid address';
+    validationMsg.style.display = 'block';
+    analysisBtn.disabled = true;
+  } else {
+    validationMsg.style.display = 'none';
+    analysisBtn.disabled = false;
+  }
+});
+
 analysisBtn.addEventListener('click', async () => {
   const address = analysisInput.value.trim();
   if (!address) return;
+  
+  const validationResult = validateSolanaAddress(address);
+  if (!validationResult.valid) {
+    validationMsg.textContent = validationResult.error || 'Invalid address';
+    validationMsg.style.display = 'block';
+    return;
+  }
   
   if (!appState.userApiKey) {
     appState.setError('Helius API key required for analysis');
@@ -195,6 +232,8 @@ analysisBtn.addEventListener('click', async () => {
   appState.setLoading(true);
   briefingPanel.classList.add('hidden');
   shareCardPanel.classList.add('hidden');
+  walletGraphControls.style.display = 'none';
+  relationshipGraph.clear();
 
   try {
     const res = await fetch(`${API_URL}/analyze/${type}`, {
@@ -220,6 +259,10 @@ analysisBtn.addEventListener('click', async () => {
 
 analysisReset.addEventListener('click', () => {
   analysisInput.value = '';
+  validationMsg.style.display = 'none';
+  analysisBtn.disabled = false;
+  relationshipGraph.clear();
+  walletGraphControls.style.display = 'none';
   appState.reset();
 });
 
@@ -332,29 +375,79 @@ btnShareImage.addEventListener('click', () => {
   link.click();
 });
 
-//  Raycaster (Particle Click) ────────────────────────────────
+//  Raycaster (Particle Click & Hover) 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
-document.addEventListener('click', async (e) => {
-  if (appState.mode !== 'analysis' || appState.analysisType !== 'token') return;
+document.addEventListener('mousemove', (e) => {
+  // Graph Dragging
+  if (appState.mode === 'analysis' && relationshipGraph.isVisible()) {
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    relationshipGraph.moveDrag(raycaster);
+  }
 
-  // Don't trigger if clicking on UI
-  if ((e.target as HTMLElement).closest('#mode2-input, #summary-panel, #briefing-panel, #mode-toggle')) {
+  // Hover pointers
+  if ((e.target as HTMLElement).closest('#hud-stats, #legend, #mode-toggle, #mode2-input, #summary-panel, #briefing-panel, #share-card-panel, #graph-legend')) {
+    document.body.style.cursor = 'default';
     return;
   }
 
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-
   raycaster.setFromCamera(mouse, camera);
-  const intersects = raycaster.intersectObjects(mode2Scene.getMeshes());
 
-  if (intersects.length > 0) {
-    const mesh = intersects[0].object;
-    const wallet = mesh.userData.wallet;
-    if (wallet) {
-      await fetchAndShowBriefing(wallet, e.clientX, e.clientY);
+  let intersects = [];
+  if (appState.mode === 'ecosystem' && latestState) {
+    intersects = raycaster.intersectObjects(particleSystem.getMeshes());
+  } else if (appState.mode === 'analysis' && appState.analysisType === 'token') {
+    intersects = raycaster.intersectObjects(mode2Scene.getMeshes());
+  } else if (appState.mode === 'analysis' && relationshipGraph.isVisible()) {
+    intersects = raycaster.intersectObjects(relationshipGraph.getMeshes());
+  }
+
+  document.body.style.cursor = intersects.length > 0 ? 'pointer' : 'default';
+});
+
+document.addEventListener('mousedown', (e) => {
+  if (appState.mode === 'analysis' && relationshipGraph.isVisible()) {
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(relationshipGraph.getMeshes());
+    if (intersects.length > 0) {
+      relationshipGraph.startDrag(intersects[0].object as THREE.Mesh, raycaster);
+    }
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  if (appState.mode === 'analysis' && relationshipGraph.isVisible()) {
+    relationshipGraph.endDrag();
+  }
+});
+
+document.addEventListener('click', async (e) => {
+  if ((e.target as HTMLElement).closest('#mode2-input, #summary-panel, #briefing-panel, #mode-toggle, #share-card-panel, #graph-legend, #hud-stats, #legend')) {
+    return;
+  }
+
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+
+  if (appState.mode === 'ecosystem' && latestState) {
+    const intersects = raycaster.intersectObjects(particleSystem.getMeshes());
+    if (intersects.length > 0) {
+      const wallet = intersects[0].object.userData.wallet;
+      if (wallet) showMode1Briefing(wallet, e.clientX, e.clientY);
+    }
+  } else if (appState.mode === 'analysis' && appState.analysisType === 'token') {
+    const intersects = raycaster.intersectObjects(mode2Scene.getMeshes());
+    if (intersects.length > 0) {
+      const wallet = intersects[0].object.userData.wallet;
+      if (wallet) await fetchAndShowBriefing(wallet, e.clientX, e.clientY);
     }
   }
 });
@@ -362,6 +455,103 @@ document.addEventListener('click', async (e) => {
 briefingClose.addEventListener('click', () => {
   briefingPanel.classList.add('hidden');
 });
+
+// Graph Controls
+const walletGraphControls = document.getElementById('wallet-graph-controls') as HTMLDivElement;
+
+btnExploreGraph.addEventListener('click', async () => {
+  const address = analysisInput.value.trim();
+  if (!address || !appState.userApiKey) return;
+  
+  btnExploreGraph.textContent = 'Loading graph...';
+  btnExploreGraph.disabled = true;
+
+  try {
+    const res = await fetch(`${API_URL}/wallet/relationships`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wallet_address: address, user_api_key: appState.userApiKey })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      relationshipGraph.loadGraph(data);
+      summaryPanel.classList.add('hidden'); // Hide original summary to focus on graph
+      btnExploreGraph.style.display = 'none';
+      btnCloseGraph.style.display = 'block';
+      graphLegend.classList.remove('hidden');
+    }
+  } catch (err) {
+    console.error('Failed to load relationships', err);
+  } finally {
+    btnExploreGraph.textContent = '🔗 Explore Relationships';
+    btnExploreGraph.disabled = false;
+  }
+});
+
+btnCloseGraph.addEventListener('click', () => {
+  relationshipGraph.clear();
+  btnExploreGraph.style.display = 'block';
+  btnCloseGraph.style.display = 'none';
+  graphLegend.classList.add('hidden');
+  summaryPanel.classList.remove('hidden'); // Restore summary
+});
+
+function showMode1Briefing(wallet: string, x: number, y: number) {
+  if (!latestState) return;
+  const node = latestState.nodes.find(n => n[0] === wallet)?.[1];
+  if (!node) return;
+
+  const classification = node.originatorScore >= 0.7 ? 'Genuine Originator' : (node.originatorScore >= 0.4 ? 'Mixed / Unknown' : 'Likely Follower');
+  
+  // Fake recent activity from timingPattern for ecosystem mode to avoid massive UI logic rewrite
+  // Or fetch pairs from state.pairs
+  let activityHtml = '';
+  const pairsIn = latestState.pairs.filter(p => p[1].buyerSequence.some(b => b.wallet === wallet));
+  
+  if (pairsIn.length > 0) {
+    activityHtml = pairsIn.slice(0, 5).map(p => {
+      const pos = p[1].buyerSequence.findIndex(b => b.wallet === wallet) + 1;
+      return `
+        <div style="font-size:10px;display:flex;justify-content:space-between;border-bottom:1px dashed rgba(0,255,200,0.15);padding:4px 0;">
+          <span style="color:#00ffff">${p[1].symbol || 'TOKEN'}</span>
+          <span style="color:rgba(255,255,255,0.6)">Pos #${pos}</span>
+        </div>
+      `;
+    }).join('');
+  } else {
+    activityHtml = '<div style="color:rgba(255,255,255,0.4)">No recent pairs found in active memory.</div>';
+  }
+
+  briefingContent.innerHTML = `
+    <div style="font-size:14px;color:#00ffff;margin-bottom:8px;font-weight:bold;">${wallet.slice(0,6)}...${wallet.slice(-4)}</div>
+    <div style="font-size:11px;color:#00ffcc;margin-bottom:12px;text-transform:uppercase;">${classification}</div>
+    
+    <div style="font-size:11px;margin-bottom:4px;display:flex;justify-content:space-between;">
+      <span style="color:rgba(0,255,200,0.6)">Originator Score:</span>
+      <span style="color:#00ffff">${(node.originatorScore * 100).toFixed(1)}%</span>
+    </div>
+    <div style="font-size:11px;margin-bottom:4px;display:flex;justify-content:space-between;">
+      <span style="color:rgba(0,255,200,0.6)">Follower Score:</span>
+      <span style="color:#00ffff">${(node.followerScore * 100).toFixed(1)}%</span>
+    </div>
+    <div style="font-size:11px;margin-bottom:12px;display:flex;justify-content:space-between;">
+      <span style="color:rgba(0,255,200,0.6)">Early Purchases:</span>
+      <span style="color:#00ffff">${node.timingPattern.earlyBuyerCount} / ${node.timingPattern.totalPairs} pairs</span>
+    </div>
+    
+    <div style="font-size:10px;color:rgba(0,255,200,0.5);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.1em;">Recent Activity</div>
+    ${activityHtml}
+  `;
+
+  const panelW = 280;
+  const panelH = 300; 
+  const left = Math.min(x + 20, window.innerWidth - panelW - 20);
+  const top = Math.min(y - 20, window.innerHeight - panelH - 20);
+  
+  briefingPanel.style.left = `${left}px`;
+  briefingPanel.style.top = `${top}px`;
+  briefingPanel.classList.remove('hidden');
+}
 
 async function fetchAndShowBriefing(wallet: string, x: number, y: number) {
   try {
@@ -421,6 +611,7 @@ function animate(): void {
     edgeRenderer.update(latestState, particleSystem.getPositions(), delta);
   } else if (appState.mode === 'analysis') {
     mode2Scene.update(delta);
+    relationshipGraph.update(delta);
   }
 
   biolumScene.render();

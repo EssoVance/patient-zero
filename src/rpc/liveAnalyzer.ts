@@ -10,7 +10,7 @@ const RAYDIUM_PROGRAM_ID = '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8';
 const ipv4Agent = new https.Agent({ family: 4 });
 
 // ============================================================
-// PATIENT ZERO - Live Analyzer (Blueprint 3.0)
+// PATIENT ZERO - Live Analyzer (Blueprint 3.0 & 4.0)
 // Uses direct HTTPS JSON-RPC calls via axios.
 // Only uses confirmed Solana JSON-RPC spec methods.
 // ============================================================
@@ -35,6 +35,30 @@ export class LiveAnalyzer {
     return response.data.result;
   }
 
+  private async detectAddressType(address: string, apiKey: string): Promise<'wallet' | 'token' | 'unknown'> {
+    try {
+      const accountInfo = await this.rpc(apiKey, 'getAccountInfo', [
+        address,
+        { encoding: 'jsonParsed' }
+      ]);
+      
+      if (!accountInfo?.value) return 'unknown';
+      
+      const owner = accountInfo.value.owner;
+      const data = accountInfo.value.data;
+      
+      if (owner === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' || owner === 'TokenzQdBNbLqP5VEhvkVNmacF6baWeCjEMegGkLqXw') {
+        if (data && typeof data === 'object' && data.parsed?.type === 'mint') {
+          return 'token';
+        }
+      }
+      
+      return 'wallet';
+    } catch (e) {
+      return 'unknown';
+    }
+  }
+
   /**
    * Analyzes a wallet based on its last 50 transactions.
    * Uses getSignaturesForAddress (no per-tx parsing needed for scoring).
@@ -46,6 +70,11 @@ export class LiveAnalyzer {
       }
       if (walletAddress.length < 32 || walletAddress.length > 44) {
         throw new Error('Invalid wallet address length. Solana addresses are 32-44 characters.');
+      }
+
+      const detectedType = await this.detectAddressType(walletAddress, apiKey);
+      if (detectedType === 'token') {
+        throw new Error('Address appears to be a token, but you selected Wallet. Please correct your selection.');
       }
 
       logger.info(`[LiveAnalyzer] Fetching signatures for wallet: ${walletAddress}`);
@@ -163,6 +192,11 @@ export class LiveAnalyzer {
         throw new Error('Invalid token address length. Solana addresses are 32-44 characters.');
       }
 
+      const detectedType = await this.detectAddressType(tokenAddress, apiKey);
+      if (detectedType === 'wallet') {
+        throw new Error('Address appears to be a wallet, but you selected Token. Please correct your selection.');
+      }
+
       logger.info(`[LiveAnalyzer] Fetching top holders for token: ${tokenAddress}`);
 
       // getTokenLargestAccounts — standard Solana RPC ✓
@@ -267,6 +301,91 @@ export class LiveAnalyzer {
       },
       buyer_sequence: [],
       top_originators: []
+    };
+  }
+
+  /**
+   * Builds a co-appearance relationship graph for a wallet.
+   * Fetches last 50 txs and extracts wallets that frequently appear alongside it.
+   */
+  async getWalletRelationships(walletAddress: string, apiKey: string) {
+    if (!walletAddress || walletAddress.startsWith('0x')) {
+      throw new Error('Invalid Solana wallet address');
+    }
+
+    logger.info(`[LiveAnalyzer] Building relationship graph for: ${walletAddress}`);
+
+    const signatures = await this.rpc(apiKey, 'getSignaturesForAddress', [
+      walletAddress,
+      { limit: 50, commitment: 'confirmed' }
+    ]);
+
+    if (!signatures || signatures.length === 0) {
+      return {
+        wallet: walletAddress,
+        relationships: { nodes: [], edges: [] },
+        data_basis: 'last_50_transactions'
+      };
+    }
+
+    // Count co-appearances per wallet
+    const coAppearances = new Map<string, number>();
+    const systemKeys = new Set([
+      walletAddress,
+      '11111111111111111111111111111111',
+      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+      'SysvarRent111111111111111111111111111111111',
+      'ComputeBudget111111111111111111111111111111',
+      PUMPFUN_PROGRAM_ID,
+      RAYDIUM_PROGRAM_ID
+    ]);
+
+    // Sample first 15 transactions to keep latency reasonable
+    const sampleSigs = signatures.slice(0, 15);
+    for (const sigEntry of sampleSigs) {
+      try {
+        const tx = await this.rpc(apiKey, 'getTransaction', [
+          sigEntry.signature,
+          { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0, commitment: 'confirmed' }
+        ]);
+        if (!tx?.transaction?.message?.accountKeys) continue;
+
+        const accountKeys: string[] = tx.transaction.message.accountKeys.map((k: any) =>
+          typeof k === 'string' ? k : (k.pubkey ?? k)
+        );
+
+        for (const key of accountKeys) {
+          if (!systemKeys.has(key)) {
+            coAppearances.set(key, (coAppearances.get(key) ?? 0) + 1);
+          }
+        }
+      } catch (_e) {
+        // Skip failed tx
+      }
+    }
+
+    // Sort by co-appearance count, top 15
+    const sortedWallets = [...coAppearances.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15);
+
+    const nodes = sortedWallets.map(([wallet, count]) => ({
+      wallet,
+      wallet_snippet: wallet.slice(0, 6) + '...' + wallet.slice(-4),
+      interaction_count: count,
+      relationship_strength: Math.min(1.0, count / 5)
+    }));
+
+    const edges = nodes.map(node => ({
+      from_wallet: walletAddress,
+      to_wallet: node.wallet,
+      strength: node.relationship_strength
+    }));
+
+    return {
+      wallet: walletAddress,
+      relationships: { nodes, edges },
+      data_basis: `last_${sampleSigs.length}_transactions`
     };
   }
 }

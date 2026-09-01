@@ -176,6 +176,26 @@ app.get('/api/wallet/:address/briefing', (req: Request, res: Response) => {
   });
 });
 
+// ─── POST /api/wallet/relationships ───────────────────────────────────────────
+app.post('/api/wallet/relationships', async (req: Request, res: Response) => {
+  const { wallet_address, user_api_key } = req.body as { wallet_address?: string; user_api_key?: string };
+  if (!wallet_address) {
+    res.status(400).json({ error: 'wallet_address is required' });
+    return;
+  }
+  if (!user_api_key) {
+    res.status(400).json({ error: 'Helius API key required' });
+    return;
+  }
+  try {
+    const graph = await liveAnalyzer.getWalletRelationships(wallet_address, user_api_key);
+    res.json(graph);
+  } catch (err: any) {
+    logger.error('Relationship graph failed', err);
+    res.status(500).json({ error: err.message || 'Failed to build relationship graph' });
+  }
+});
+
 export function startRestServer(): http.Server {
   const server = http.createServer(app);
   // On Render, we must use the single PORT env var for both HTTP and WS
