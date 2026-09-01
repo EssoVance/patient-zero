@@ -398,13 +398,25 @@ document.addEventListener('mousemove', (e) => {
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
 
-  let intersects = [];
+  let intersects: any[] = [];
   if (appState.mode === 'ecosystem' && latestState) {
     intersects = raycaster.intersectObjects(particleSystem.getMeshes());
   } else if (appState.mode === 'analysis' && appState.analysisType === 'token') {
     intersects = raycaster.intersectObjects(mode2Scene.getMeshes());
   } else if (appState.mode === 'analysis' && relationshipGraph.isVisible()) {
     intersects = raycaster.intersectObjects(relationshipGraph.getMeshes());
+  }
+
+  // Bug 1 fix: show wallet address tooltip when hovering graph nodes
+  if (appState.mode === 'analysis' && relationshipGraph.isVisible()) {
+    const hover = relationshipGraph.getHoveredWallet(raycaster);
+    if (hover) {
+      relationshipGraph.showTooltip(hover.wallet, hover.interactionCount, hover.strength, e.clientX, e.clientY);
+    } else {
+      relationshipGraph.hideTooltip();
+    }
+  } else {
+    relationshipGraph.hideTooltip();
   }
 
   document.body.style.cursor = intersects.length > 0 ? 'pointer' : 'default';
@@ -449,6 +461,10 @@ document.addEventListener('click', async (e) => {
       const wallet = intersects[0].object.userData.wallet;
       if (wallet) await fetchAndShowBriefing(wallet, e.clientX, e.clientY);
     }
+  } else if (appState.mode === 'analysis' && relationshipGraph.isVisible()) {
+    // Bug 1 fix: clicking a graph node shows its full address in the briefing panel
+    const hover = relationshipGraph.getHoveredWallet(raycaster);
+    if (hover) showGraphNodeBriefing(hover.wallet, hover.interactionCount, hover.strength, e.clientX, e.clientY);
   }
 });
 
@@ -495,6 +511,41 @@ btnCloseGraph.addEventListener('click', () => {
   graphLegend.classList.add('hidden');
   summaryPanel.classList.remove('hidden'); // Restore summary
 });
+
+function showGraphNodeBriefing(wallet: string, interactionCount: number, strength: number, x: number, y: number) {
+  const classification = strength >= 0.8 ? 'STRONG PARTNER' : (strength >= 0.4 ? 'MODERATE PARTNER' : 'WEAK PARTNER');
+  const strengthPct = (strength * 100).toFixed(0);
+  const bars = '█'.repeat(Math.round(strength * 10)) + '░'.repeat(10 - Math.round(strength * 10));
+
+  briefingContent.innerHTML = `
+    <div style="font-size:11px;color:rgba(0,255,200,0.5);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">Graph Node</div>
+    <div style="font-size:13px;color:#00ffff;margin-bottom:4px;font-weight:bold;word-break:break-all;">${wallet}</div>
+    <div style="font-size:10px;color:rgba(0,255,200,0.6);margin-bottom:12px;">${wallet.slice(0, 8)}...${wallet.slice(-4)}</div>
+
+    <div style="font-size:11px;margin-bottom:4px;display:flex;justify-content:space-between;">
+      <span style="color:rgba(0,255,200,0.6)">Relationship:</span>
+      <span style="color:#00ffcc;text-transform:uppercase;font-size:10px">${classification}</span>
+    </div>
+    <div style="font-size:11px;margin-bottom:4px;display:flex;justify-content:space-between;">
+      <span style="color:rgba(0,255,200,0.6)">Co-appearances:</span>
+      <span style="color:#00ffff">${interactionCount} tx</span>
+    </div>
+    <div style="font-size:11px;margin-bottom:8px;display:flex;justify-content:space-between;">
+      <span style="color:rgba(0,255,200,0.6)">Strength:</span>
+      <span style="color:#00ffff">${strengthPct}%</span>
+    </div>
+    <div style="font-family:monospace;font-size:10px;color:#00ff80;letter-spacing:1px;">${bars}</div>
+  `;
+
+  const panelW = 280;
+  const panelH = 240;
+  const left = Math.min(x + 20, window.innerWidth - panelW - 20);
+  const top  = Math.min(y - 20, window.innerHeight - panelH - 20);
+
+  briefingPanel.style.left = `${left}px`;
+  briefingPanel.style.top  = `${top}px`;
+  briefingPanel.classList.remove('hidden');
+}
 
 function showMode1Briefing(wallet: string, x: number, y: number) {
   if (!latestState) return;
