@@ -7,7 +7,7 @@ import { RelationshipGraph, RelationshipData } from './relationshipGraph';
 import { audioManager } from './audioManager';
 import { wsClient, GraphStateSerialized } from './wsClient';
 import { appState, TokenAnalysisResult, WalletAnalysisResult, WalletBriefing } from './appState';
-import { validateSolanaAddress } from './validation';
+import { validateSolanaAddress, detectAddressType } from './validation';
 
 // ============================================================
 // PATIENT ZERO — Main Entry Point & UI Controller
@@ -131,6 +131,16 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+// Also stop when user switches to another app (window loses focus)
+window.addEventListener('blur', () => {
+  wsClient.disconnect();
+  if (audioStarted) audioManager.stop();
+});
+window.addEventListener('focus', () => {
+  wsClient.connect();
+  if (audioStarted) audioManager.start();
+});
+
 // ── Mode Switching ────────────────────────────────────────────
 btnMode1.addEventListener('click', () => appState.setMode('ecosystem'));
 btnMode2.addEventListener('click', () => appState.setMode('analysis'));
@@ -234,6 +244,17 @@ analysisBtn.addEventListener('click', async () => {
   for (let i = 0; i < typeRadios.length; i++) {
     if ((typeRadios[i] as HTMLInputElement).checked) {
       type = (typeRadios[i] as HTMLInputElement).value;
+    }
+  }
+
+  // Auto-detect address type — PumpFun tokens end in "pump"
+  const detected = detectAddressType(address);
+  if (detected === 'token' && type === 'wallet') {
+    // Silently correct: it's a PumpFun token — switch to token mode
+    type = 'token';
+    for (let i = 0; i < typeRadios.length; i++) {
+      const radio = typeRadios[i] as HTMLInputElement;
+      radio.checked = radio.value === 'token';
     }
   }
 
@@ -360,11 +381,11 @@ btnShareImage.addEventListener('click', () => {
   const ctx = shareCanvas.getContext('2d');
   if (!ctx) return;
 
-  const W = 700, H = 420;
+  const W = 800, H = 460;
   shareCanvas.width = W;
   shareCanvas.height = H;
 
-  // ── Premium gradient background ──────────────────────────────
+  // ── Background ───────────────────────────────────────────────
   const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
   bgGrad.addColorStop(0,   '#050d18');
   bgGrad.addColorStop(0.5, '#071620');
@@ -372,147 +393,147 @@ btnShareImage.addEventListener('click', () => {
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, W, H);
 
-  // Subtle grid overlay
+  // Grid overlay
   ctx.strokeStyle = 'rgba(0,255,200,0.04)';
   ctx.lineWidth = 1;
-  for (let x = 0; x < W; x += 24) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-  for (let y = 0; y < H; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  for (let x = 0; x < W; x += 28) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = 0; y < H; y += 28) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
 
-  // Border glow
-  const borderGrad = ctx.createLinearGradient(0, 0, W, H);
-  borderGrad.addColorStop(0, 'rgba(0,255,255,0.6)');
-  borderGrad.addColorStop(0.5, 'rgba(0,255,120,0.3)');
-  borderGrad.addColorStop(1, 'rgba(0,255,255,0.6)');
-  ctx.strokeStyle = borderGrad;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(1, 1, W - 2, H - 2);
+  // Border
+  const bGrad = ctx.createLinearGradient(0,0,W,H);
+  bGrad.addColorStop(0, 'rgba(0,255,255,0.6)');
+  bGrad.addColorStop(0.5, 'rgba(0,255,120,0.3)');
+  bGrad.addColorStop(1, 'rgba(0,255,255,0.6)');
+  ctx.strokeStyle = bGrad; ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, W-2, H-2);
 
-  // ── Header ───────────────────────────────────────────────────
+  // ── Header bar ───────────────────────────────────────────────
   ctx.fillStyle = 'rgba(0,255,200,0.08)';
-  ctx.fillRect(0, 0, W, 54);
-  ctx.strokeStyle = 'rgba(0,255,200,0.25)';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(0, 54); ctx.lineTo(W, 54); ctx.stroke();
+  ctx.fillRect(0, 0, W, 58);
+  ctx.strokeStyle = 'rgba(0,255,200,0.25)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0,58); ctx.lineTo(W,58); ctx.stroke();
 
   ctx.fillStyle = '#00ffff';
-  ctx.font = 'bold 15px monospace';
-  ctx.fillText('PATIENT ZERO // BIOLUMINESCENCE', 20, 33);
+  ctx.font = 'bold 16px monospace';
+  ctx.fillText('PATIENT ZERO // BIOLUMINESCENCE', 20, 36);
 
-  // Timestamp top-right
-  ctx.fillStyle = 'rgba(0,255,200,0.4)';
+  ctx.fillStyle = 'rgba(0,255,200,0.35)';
   ctx.font = '10px monospace';
-  const timestamp = new Date().toUTCString().replace(' GMT', ' UTC');
-  ctx.fillText(timestamp, W - ctx.measureText(timestamp).width - 16, 33);
+  const ts = new Date().toUTCString().replace(' GMT',' UTC');
+  ctx.fillText(ts, W - ctx.measureText(ts).width - 18, 36);
 
-  // ── Helper: draw horizontal bar gauge ────────────────────────
-  function drawGauge(x: number, y: number, w: number, value: number, color: string, label: string) {
-    const pct = Math.max(0, Math.min(1, value));
-    // Track
-    ctx.fillStyle = 'rgba(0,255,200,0.1)';
-    ctx.fillRect(x, y, w, 8);
-    // Fill
-    const fillGrad = ctx.createLinearGradient(x, 0, x + w * pct, 0);
-    fillGrad.addColorStop(0, color);
-    fillGrad.addColorStop(1, '#00ff80');
-    ctx.fillStyle = fillGrad;
-    ctx.fillRect(x, y, w * pct, 8);
-    // Label
+  // Sub-line: by @EssoVance
+  ctx.fillStyle = 'rgba(0,255,255,0.5)';
+  ctx.font = '9px monospace';
+  ctx.fillText('by @EssoVance', 20, 50);
+
+  // ── Gauge helper ─────────────────────────────────────────────
+  function drawGauge(x: number, y: number, w: number, val: number, color: string, label: string) {
+    const pct = Math.max(0, Math.min(1, val));
+    ctx.fillStyle = 'rgba(0,255,200,0.08)';
+    ctx.fillRect(x, y, w, 9);
+    const fg = ctx.createLinearGradient(x, 0, x + w, 0);
+    fg.addColorStop(0, color); fg.addColorStop(1, '#00ff80');
+    ctx.fillStyle = fg;
+    ctx.fillRect(x, y, w * pct, 9);
     ctx.fillStyle = 'rgba(0,255,200,0.6)';
     ctx.font = '9px monospace';
-    ctx.fillText(label, x, y - 3);
-    // Value
+    ctx.fillText(label, x, y - 4);
     ctx.fillStyle = '#00ffcc';
-    ctx.fillText((pct * 100).toFixed(0) + '%', x + w + 4, y + 7);
+    ctx.fillText((pct * 100).toFixed(0) + '%', x + w + 6, y + 8);
   }
+
+  // ── Divider between left and right columns ───────────────────
+  const DIVX = 390; // pixel boundary between left / right
+  ctx.strokeStyle = 'rgba(0,255,200,0.12)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(DIVX, 68); ctx.lineTo(DIVX, H - 50); ctx.stroke();
 
   if (appState.analysisType === 'wallet' && appState.analysisResult) {
     const res = appState.analysisResult as WalletAnalysisResult;
-    const am = (res as any).advanced_metrics;
+    const am  = (res as any).advanced_metrics;
     const depth = am ? 'Advanced Analysis (150 tx)' : 'Basic Analysis (50 tx)';
     const snippet = res.wallet_snippet || `${res.wallet?.slice(0,6)}...${res.wallet?.slice(-4)}`;
 
-    // Sub-header
-    ctx.fillStyle = 'rgba(0,255,200,0.5)';
+    // ── LEFT COLUMN ───────────────────────────────────────────
+    ctx.fillStyle = 'rgba(0,255,200,0.4)';
     ctx.font = '9px monospace';
-    ctx.fillText('WALLET ANALYSIS  //  ' + depth, 20, 72);
+    ctx.fillText('WALLET ANALYSIS  //  ' + depth, 20, 76);
 
-    // Wallet address
     ctx.fillStyle = '#00ffff';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText(snippet, 20, 92);
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText(snippet, 20, 96);
 
     // Classification badge
     const cls = res.classification.replace(/_/g, ' ').toUpperCase();
     const clsColor = res.originator_score >= 0.7 ? '#00ffcc' : (res.originator_score >= 0.4 ? '#ffcc00' : '#ff6666');
-    ctx.fillStyle = `${clsColor}22`;
-    const bw = ctx.measureText(cls).width + 20;
-    ctx.fillRect(20, 100, bw, 20);
-    ctx.strokeStyle = clsColor;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(20, 100, bw, 20);
-    ctx.fillStyle = clsColor;
     ctx.font = 'bold 10px monospace';
-    ctx.fillText(cls, 30, 114);
+    const bw = ctx.measureText(cls).width + 22;
+    ctx.fillStyle = clsColor + '22';
+    ctx.fillRect(20, 104, bw, 22);
+    ctx.strokeStyle = clsColor; ctx.lineWidth = 1;
+    ctx.strokeRect(20, 104, bw, 22);
+    ctx.fillStyle = clsColor;
+    ctx.fillText(cls, 31, 119);
 
-    // ── Score gauges ─────────────────────────────────────────────
-    const gx = 20, gy = 148, gw = 220;
-    drawGauge(gx, gy,       gw, res.originator_score, '#00ffff', 'ORIGINATOR SCORE');
-    if (res.confidence !== undefined) drawGauge(gx, gy + 28, gw, res.confidence,       '#00ff80', 'CONFIDENCE');
-    if (res.leadership_indicators) {
-      drawGauge(gx, gy + 56, gw, res.leadership_indicators.early_entry_rate, '#00ffcc', 'EARLY ENTRY RATE');
-    }
+    // Gauges — left column, max width 240px so they don't reach DIVX
+    const GW = 240, GX = 20;
+    drawGauge(GX, 152, GW, res.originator_score,                              '#00ffff', 'ORIGINATOR SCORE');
+    if (res.confidence !== undefined)
+      drawGauge(GX, 186, GW, res.confidence,                                  '#00ff80', 'CONFIDENCE');
+    if (res.leadership_indicators)
+      drawGauge(GX, 220, GW, res.leadership_indicators.early_entry_rate,      '#00ffcc', 'EARLY ENTRY RATE');
 
-    // ── Advanced metrics panel ────────────────────────────────────
+    // ── RIGHT COLUMN ─────────────────────────────────────────
+    const RX = DIVX + 20;
+
     if (am) {
-      ctx.fillStyle = 'rgba(255,204,0,0.06)';
-      ctx.fillRect(260, 130, 420, 230);
-      ctx.strokeStyle = 'rgba(255,204,0,0.2)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(260, 130, 420, 230);
-
+      // Advanced metrics right panel
       ctx.fillStyle = '#ffcc00';
-      ctx.font = 'bold 10px monospace';
-      ctx.fillText('ADVANCED METRICS', 272, 148);
-      ctx.strokeStyle = 'rgba(255,204,0,0.15)';
-      ctx.beginPath(); ctx.moveTo(272, 152); ctx.lineTo(668, 152); ctx.stroke();
-
-      const mx = 272, mw = 160;
-      drawGauge(mx, 172, mw, am.network_centrality,  '#ffcc00', 'NETWORK CENTRALITY');
-      drawGauge(mx, 200, mw, am.consistency_score,   '#ff9900', 'CONSISTENCY SCORE');
-      drawGauge(mx + 190, 172, mw, am.percentile_ranking / 100, '#00ffff', 'PERCENTILE RANK');
-
-      ctx.fillStyle = 'rgba(0,255,200,0.5)';
-      ctx.font = '9px monospace';
-      ctx.fillText('CASCADE INFLUENCE:', mx, 230);
-      ctx.fillText('RISK PROFILE:', mx + 190, 230);
-      ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 11px monospace';
-      ctx.fillText(am.cascade_influence.toUpperCase(), mx, 244);
-      ctx.fillText(am.risk_profile.toUpperCase(), mx + 190, 244);
+      ctx.fillText('ADVANCED METRICS', RX, 84);
+      ctx.strokeStyle = 'rgba(255,204,0,0.2)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(RX, 88); ctx.lineTo(W - 16, 88); ctx.stroke();
 
-      // Percentile bar (big visual)
-      ctx.fillStyle = 'rgba(0,255,200,0.1)';
-      ctx.fillRect(mx, 270, 370, 12);
-      const pGrad = ctx.createLinearGradient(mx, 0, mx + 370, 0);
-      pGrad.addColorStop(0, '#001a0a'); pGrad.addColorStop(1, '#00ffff');
-      ctx.fillStyle = pGrad;
-      ctx.fillRect(mx, 270, (am.percentile_ranking / 100) * 370, 12);
+      const RW = 165;
+      drawGauge(RX,       114, RW, am.network_centrality,        '#ffcc00', 'NETWORK CENTRALITY');
+      drawGauge(RX,       148, RW, am.consistency_score,         '#ff9900', 'CONSISTENCY SCORE');
+      drawGauge(RX + 195, 114, RW, am.percentile_ranking / 100,  '#00ffff', 'PERCENTILE RANK');
+
+      ctx.fillStyle = 'rgba(0,255,200,0.5)'; ctx.font = '9px monospace';
+      ctx.fillText('CASCADE INFLUENCE:', RX, 188);
+      ctx.fillText('RISK PROFILE:',      RX + 195, 188);
+      ctx.fillStyle = '#ffffff'; ctx.font = 'bold 12px monospace';
+      ctx.fillText(am.cascade_influence.toUpperCase(), RX, 204);
+      ctx.fillText(am.risk_profile.toUpperCase(),      RX + 195, 204);
+
+      // Percentile spectrum bar
+      ctx.fillStyle = 'rgba(0,255,200,0.08)';
+      ctx.fillRect(RX, 230, W - RX - 16, 12);
+      const pg = ctx.createLinearGradient(RX, 0, W - 16, 0);
+      pg.addColorStop(0,'#001a0a'); pg.addColorStop(1,'#00ffff');
+      ctx.fillStyle = pg;
+      ctx.fillRect(RX, 230, (am.percentile_ranking / 100) * (W - RX - 16), 12);
       ctx.fillStyle = '#00ffcc'; ctx.font = '9px monospace';
-      ctx.fillText(`Top ${100 - am.percentile_ranking}% of tracked wallets`, mx, 297);
-    }
+      ctx.fillText(`Top ${100 - am.percentile_ranking}% of tracked wallets`, RX, 258);
 
-    // ── Basic stats right panel (no advanced) ──────────────────
-    if (!am) {
-      ctx.fillStyle = 'rgba(0,255,200,0.5)';
-      ctx.font = '9px monospace';
-      ctx.fillText('TXS ANALYZED:', 260, 150);
-      ctx.fillText('EARLY ENTRY RATE:', 260, 175);
-      ctx.fillText('LEADERSHIP EVIDENCE:', 260, 200);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 12px monospace';
-      ctx.fillText(String(res.transaction_count ?? 50), 260, 165);
-      ctx.fillText((res.leadership_indicators?.early_entry_rate * 100 ?? 0).toFixed(1) + '%', 260, 190);
-      ctx.fillText((res.leadership_indicators?.leadership_evidence ?? 'N/A').toUpperCase(), 260, 215);
+    } else {
+      // Basic: right panel stats
+      ctx.fillStyle = '#00ffcc'; ctx.font = 'bold 11px monospace';
+      ctx.fillText('ANALYSIS SUMMARY', RX, 84);
+      ctx.strokeStyle = 'rgba(0,255,200,0.2)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(RX, 88); ctx.lineTo(W - 16, 88); ctx.stroke();
+
+      const rows: [string, string][] = [
+        ['TXS ANALYZED',      String(res.transaction_count ?? 50)],
+        ['EARLY ENTRY RATE',  ((res.leadership_indicators?.early_entry_rate ?? 0) * 100).toFixed(1) + '%'],
+        ['LEADERSHIP',        (res.leadership_indicators?.leadership_evidence ?? 'N/A').toUpperCase()],
+      ];
+      rows.forEach(([lbl, val], i) => {
+        ctx.fillStyle = 'rgba(0,255,200,0.5)'; ctx.font = '9px monospace';
+        ctx.fillText(lbl + ':', RX, 114 + i * 36);
+        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 14px monospace';
+        ctx.fillText(val, RX, 132 + i * 36);
+      });
     }
 
   } else if (appState.analysisType === 'token' && appState.analysisResult) {
@@ -520,80 +541,73 @@ btnShareImage.addEventListener('click', () => {
     const ms = (res.token_analysis as any).market_structure;
     const depth = ms ? 'Advanced Analysis' : 'Basic Analysis';
 
-    ctx.fillStyle = 'rgba(0,255,200,0.5)';
-    ctx.font = '9px monospace';
-    ctx.fillText('TOKEN ANALYSIS  //  ' + depth, 20, 72);
+    // ── LEFT COLUMN ───────────────────────────────────────────
+    ctx.fillStyle = 'rgba(0,255,200,0.4)'; ctx.font = '9px monospace';
+    ctx.fillText('TOKEN ANALYSIS  //  ' + depth, 20, 76);
 
-    ctx.fillStyle = '#00ffff';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText(`${res.token_analysis.token_symbol}  ${res.token_analysis.token_address.slice(0,8)}...`, 20, 92);
+    ctx.fillStyle = '#00ffff'; ctx.font = 'bold 13px monospace';
+    const sym = res.token_analysis.token_symbol || '';
+    ctx.fillText(`${sym}  ${res.token_analysis.token_address.slice(0,8)}...`, 20, 96);
 
-    // Top originators list
-    ctx.fillStyle = 'rgba(0,255,200,0.5)';
-    ctx.font = '9px monospace';
-    ctx.fillText('TOP ORIGINATORS', 20, 120);
+    ctx.fillStyle = 'rgba(0,255,200,0.5)'; ctx.font = '9px monospace';
+    ctx.fillText('TOP ORIGINATORS', 20, 122);
+
     res.top_originators.slice(0, 5).forEach((o, i) => {
-      const scoreColor = o.originator_score >= 0.7 ? '#00ffff' : '#00ff80';
-      ctx.fillStyle = scoreColor;
-      ctx.font = 'bold 11px monospace';
-      ctx.fillText(`#${i+1} ${o.wallet.slice(0,6)}...${o.wallet.slice(-4)}`, 20, 140 + i * 22);
-      ctx.fillStyle = 'rgba(0,255,200,0.5)';
-      ctx.font = '9px monospace';
-      ctx.fillText(`${(o.originator_score * 100).toFixed(0)}%`, 230, 140 + i * 22);
+      const c = o.originator_score >= 0.7 ? '#00ffff' : '#00ff80';
+      ctx.fillStyle = c; ctx.font = 'bold 11px monospace';
+      ctx.fillText(`#${i+1}  ${o.wallet.slice(0,6)}...${o.wallet.slice(-4)}`, 20, 142 + i * 24);
+      ctx.fillStyle = 'rgba(0,255,200,0.5)'; ctx.font = '9px monospace';
+      ctx.fillText((o.originator_score * 100).toFixed(0) + '%', 310, 142 + i * 24);
     });
 
-    // Market structure panel
+    // ── RIGHT COLUMN ─────────────────────────────────────────
+    const RX2 = DIVX + 20;
     if (ms) {
-      ctx.fillStyle = 'rgba(0,100,80,0.15)';
-      ctx.fillRect(290, 68, 390, 290);
-      ctx.strokeStyle = 'rgba(0,255,200,0.2)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(290, 68, 390, 290);
+      ctx.fillStyle = '#00ffcc'; ctx.font = 'bold 11px monospace';
+      ctx.fillText('MARKET STRUCTURE', RX2, 84);
+      ctx.strokeStyle = 'rgba(0,255,200,0.2)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(RX2, 88); ctx.lineTo(W - 16, 88); ctx.stroke();
 
-      ctx.fillStyle = '#00ffcc';
-      ctx.font = 'bold 10px monospace';
-      ctx.fillText('MARKET STRUCTURE', 302, 86);
-      ctx.strokeStyle = 'rgba(0,255,200,0.15)';
-      ctx.beginPath(); ctx.moveTo(302, 90); ctx.lineTo(668, 90); ctx.stroke();
+      const RW2 = 165;
+      drawGauge(RX2, 114, RW2, ms.holder_concentration,        '#ff6666', 'HOLDER CONCENTRATION');
+      drawGauge(RX2, 152, RW2, Math.max(0, ms.holder_growth_rate + 0.1), '#00ff80', 'HOLDER GROWTH');
 
-      const sx = 302, sw = 155;
-      drawGauge(sx, 110, sw, ms.holder_concentration, '#ff6666', 'HOLDER CONCENTRATION');
-      drawGauge(sx, 138, sw, ms.holder_growth_rate + 0.1, '#00ff80', 'HOLDER GROWTH');
-
-      ctx.fillStyle = 'rgba(0,255,200,0.5)';
-      ctx.font = '9px monospace';
-      const labels = ['VOLUME VELOCITY', 'TX FREQUENCY'];
-      const vals   = [ms.volume_velocity, ms.transaction_frequency];
-      labels.forEach((l, i) => {
-        ctx.fillStyle = 'rgba(0,255,200,0.5)';
-        ctx.font = '9px monospace';
-        ctx.fillText(l + ':', sx + i * 170, 175);
-        ctx.fillStyle = '#00ffff';
-        ctx.font = 'bold 12px monospace';
-        ctx.fillText(vals[i].toUpperCase(), sx + i * 170, 191);
+      const textRows: [string, string][] = [
+        ['VOLUME VELOCITY', ms.volume_velocity],
+        ['TX FREQUENCY',    ms.transaction_frequency],
+      ];
+      textRows.forEach(([lbl, val], i) => {
+        ctx.fillStyle = 'rgba(0,255,200,0.5)'; ctx.font = '9px monospace';
+        ctx.fillText(lbl + ':', RX2, 196 + i * 36);
+        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 12px monospace';
+        ctx.fillText(String(val).toUpperCase(), RX2, 212 + i * 36);
       });
     }
   }
 
-  // ── Quality seal ─────────────────────────────────────────────
-  const sealX = W - 140, sealY = H - 46;
-  ctx.fillStyle = 'rgba(0,255,200,0.08)';
-  ctx.fillRect(sealX, sealY, 124, 32);
-  ctx.strokeStyle = 'rgba(0,255,200,0.4)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(sealX, sealY, 124, 32);
-  ctx.fillStyle = '#00ffcc';
-  ctx.font = 'bold 9px monospace';
-  ctx.fillText('✓ PATIENT ZERO CERTIFIED', sealX + 8, sealY + 14);
-  ctx.fillStyle = 'rgba(0,255,200,0.5)';
-  ctx.font = '8px monospace';
-  ctx.fillText('@EssoVance — BIOLUMINESCENCE', sealX + 8, sealY + 25);
+  // ── Bottom branding bar ───────────────────────────────────────
+  ctx.fillStyle = 'rgba(0,255,200,0.05)';
+  ctx.fillRect(0, H - 42, W, 42);
+  ctx.strokeStyle = 'rgba(0,255,200,0.15)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, H - 42); ctx.lineTo(W, H - 42); ctx.stroke();
+
+  // Left: certified stamp
+  ctx.fillStyle = '#00ffcc'; ctx.font = 'bold 10px monospace';
+  ctx.fillText('✓ PATIENT ZERO CERTIFIED', 20, H - 22);
+  ctx.fillStyle = 'rgba(0,255,200,0.5)'; ctx.font = '9px monospace';
+  ctx.fillText('BIOLUMINESCENCE by @EssoVance', 20, H - 10);
+
+  // Right: URL
+  const urlTxt = 'patient-zero-app.vercel.app';
+  ctx.fillStyle = 'rgba(0,255,200,0.35)'; ctx.font = '9px monospace';
+  ctx.fillText(urlTxt, W - ctx.measureText(urlTxt).width - 18, H - 16);
 
   const link = document.createElement('a');
   link.download = 'patient-zero-premium-card.png';
   link.href = shareCanvas.toDataURL('image/png');
   link.click();
 });
+
 
 //  Raycaster (Particle Click & Hover) 
 const raycaster = new THREE.Raycaster();

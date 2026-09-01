@@ -46,9 +46,9 @@
     .stat-label { color: rgba(0,255,200,0.5); }
     .stat-value { color: #00ffcc; font-weight: 700; }
 
-    /* ── Legend: bottom-right ── */
+    /* ── Legend: bottom-left (Mode 1 only) ── */
     #legend {
-      position: fixed; bottom: 24px; right: 24px;
+      position: fixed; bottom: 24px; left: 24px;
       background: rgba(0,10,20,0.75);
       border: 1px solid rgba(0,255,200,0.2);
       border-radius: 4px;
@@ -72,6 +72,38 @@
       margin-right: 8px;
       vertical-align: middle;
     }
+
+    /* ── Branding ── */
+    /* Bottom-right: BIOLUMINESCENCE by @EssoVance */
+    #branding-bottom-right {
+      position: fixed; bottom: 16px; right: 20px;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: #00ffff;
+      text-shadow: 0 0 10px #00ffff, 0 0 20px rgba(0,255,255,0.4);
+      text-transform: uppercase;
+      pointer-events: none;
+      user-select: none;
+      z-index: 11;
+      opacity: 0.75;
+    }
+    /* Top-left secondary: below HUD stats */
+    #branding-top-left {
+      position: fixed; top: 20px; left: 20px;
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      color: rgba(0,255,255,0.55);
+      text-shadow: 0 0 8px rgba(0,255,255,0.3);
+      text-transform: uppercase;
+      pointer-events: none;
+      user-select: none;
+      z-index: 10;
+      /* pushed right so it doesn't sit behind the HUD box */
+      padding-left: 4px;
+    }
+
+    /* ── Watermark (hidden — replaced by branding) ── */
+    #watermark { display: none; }
 
     /* ── Loading spinner ── */
     #loading {
@@ -311,8 +343,8 @@
     <div id="briefing-content"></div>
   </div>
 
-  <!-- Relationship Graph Legend -->
-  <div id="graph-legend" class="hidden" style="position:fixed;bottom:60px;right:20px;background:rgba(0,10,20,0.85);border:1px solid rgba(0,255,200,0.2);padding:10px 14px;font-family:monospace;font-size:10px;color:#00ffcc;z-index:15;">
+  <!-- Relationship Graph Legend — bottom-left, clears the branding area on the right -->
+  <div id="graph-legend" class="hidden" style="position:fixed;bottom:44px;left:20px;background:rgba(0,10,20,0.85);border:1px solid rgba(0,255,200,0.2);padding:10px 14px;font-family:monospace;font-size:10px;color:#00ffcc;z-index:15;">
     <div style="font-weight:bold;margin-bottom:6px;">Relationship Strength</div>
     <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#00ffff;margin-right:6px;"></span>Strong (≥5 interactions)</div>
     <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#00ff80;margin-right:6px;"></span>Moderate (2–4)</div>
@@ -327,8 +359,13 @@
     <div><span class="legend-dot" style="background:#ffffff;box-shadow:0 0 8px #fff;"></span><span>New Pair Launch</span></div>
   </div>
 
-  <div id="watermark">BIOLUMINESCENCE · @EssoVance</div>
+  <!-- Primary branding: bottom-right -->
+  <div id="branding-bottom-right">BIOLUMINESCENCE &nbsp;·&nbsp; @EssoVance</div>
+
+  <!-- Hidden watermark (superseded by branding) -->
+  <div id="watermark"></div>
 
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
+

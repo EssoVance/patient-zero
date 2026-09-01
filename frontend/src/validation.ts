@@ -6,9 +6,26 @@
 // Explicitly excludes: 0 (zero), O (capital o), I (capital i), l (lowercase L)
 const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
+// PumpFun tokens always end in "pump" (case-insensitive)
+const PUMPFUN_SUFFIX = /pump$/i;
+
 export interface ValidationResult {
   valid: boolean;
   error?: string;
+}
+
+export type AddressType = 'wallet' | 'token' | 'unknown';
+
+/**
+ * Heuristically detects whether an address is likely a PumpFun token or a wallet.
+ * PumpFun mint addresses always end in "pump".
+ * Standard wallet addresses are pure base58, 43-44 chars, no special suffix.
+ */
+export function detectAddressType(address: string): AddressType {
+  const trimmed = address.trim();
+  if (PUMPFUN_SUFFIX.test(trimmed)) return 'token';
+  // Wallets tend to be exactly 44 chars; tokens vary but no defining suffix for non-pump
+  return 'unknown';
 }
 
 export function validateSolanaAddress(address: string): ValidationResult {
