@@ -196,56 +196,90 @@ export class LiveAnalyzer {
    */
   async analyzeTokenLive(tokenAddress: string, apiKey: string, depth: 'basic' | 'advanced' = 'basic') {
     try {
-      // Validate: Solana addresses are base58, 32-44 chars, never start with 0x
+      // Basic format validation only — frontend already handles type detection
       if (!tokenAddress || tokenAddress.startsWith('0x')) {
-        throw new Error('Invalid Solana token address. Ethereum (0x...) addresses are not supported. Please enter a Solana SPL token mint address.');
+        throw new Error('Invalid Solana token address. Ethereum addresses not supported.');
       }
       if (tokenAddress.length < 32 || tokenAddress.length > 44) {
         throw new Error('Invalid token address length. Solana addresses are 32-44 characters.');
       }
 
-      const detectedType = await this.detectAddressType(tokenAddress, apiKey);
-      if (detectedType === 'wallet') {
-        throw new Error('Address appears to be a wallet, but you selected Token. Please correct your selection.');
+      logger.info(`[LiveAnalyzer] Analyzing token: ${tokenAddress}`);
+
+      // ── Strategy 1: getTokenLargestAccounts ──────────────────────
+      let topHolders: any[] = [];
+      
+      try {
+        const result = await this.rpc(apiKey, 'getTokenLargestAccounts', [tokenAddress]);
+        if (result?.value && result.value.length > 0) {
+          topHolders = result.value.slice(0, 10);
+          logger.info(`[LiveAnalyzer] Strategy 1 succeeded: ${topHolders.length} holders found`);
+        }
+      } catch (e1: any) {
+        logger.warn(`[LiveAnalyzer] Strategy 1 (getTokenLargestAccounts) failed: ${e1?.message}`);
       }
 
-      logger.info(`[LiveAnalyzer] Fetching top holders for token: ${tokenAddress}`);
+      // ── Strategy 2: Helius getTokenAccounts (if strategy 1 failed) ─
+      if (topHolders.length === 0) {
+        try {
+          const url = `https://mainnet.helius-rpc.com/?api-key=${apiKey}`;
+          const response = await axios.post(url, {
+            jsonrpc: '2.0', id: 2,
+            method: 'getTokenAccounts',
+            params: {
+              mint: tokenAddress,
+              limit: 10
+            }
+          }, { timeout: 20000, httpsAgent: ipv4Agent });
 
-      // getTokenLargestAccounts — standard Solana RPC ✓
-      // Pass ONLY the pubkey string (no config object — avoids -32602 on Helius)
-      const result = await this.rpc(apiKey, 'getTokenLargestAccounts', [
-        tokenAddress
-      ]);
+          const accounts = response.data?.result?.token_accounts;
+          if (accounts && accounts.length > 0) {
+            topHolders = accounts.map((acc: any) => ({
+              address: acc.address,
+              amount: acc.amount || '0',
+              owner: acc.owner
+            }));
+            logger.info(`[LiveAnalyzer] Strategy 2 (getTokenAccounts) succeeded: ${topHolders.length} holders`);
+          }
+        } catch (e2: any) {
+          logger.warn(`[LiveAnalyzer] Strategy 2 (getTokenAccounts) failed: ${e2?.message}`);
+        }
+      }
 
-      if (!result || !result.value || result.value.length === 0) {
+      // ── No holders found — return empty but valid response ─────────
+      if (topHolders.length === 0) {
+        logger.info(`[LiveAnalyzer] No holders found for token, returning empty response`);
         return this.generateEmptyTokenResponse(tokenAddress);
       }
 
-      const topHolders = result.value.slice(0, 10);
+      // ── Resolve token account owners in one batch call ─────────────
+      const addressesToFetch = topHolders.map((acc: any) => acc.address);
+      let accountOwners: string[] = addressesToFetch;
+
+      // If strategy 2 already gave us owners, use them directly
+      const hasOwners = topHolders.every((acc: any) => acc.owner);
+      if (hasOwners) {
+        accountOwners = topHolders.map((acc: any) => acc.owner || acc.address);
+      } else {
+        try {
+          const accInfosResult = await this.rpc(apiKey, 'getMultipleAccounts', [
+            addressesToFetch,
+            { encoding: 'jsonParsed', commitment: 'confirmed' }
+          ]);
+          accountOwners = accInfosResult?.value?.map((info: any, idx: number) => {
+            return info?.data?.parsed?.info?.owner || addressesToFetch[idx];
+          }) || addressesToFetch;
+        } catch (_e) {
+          // Keep fallback to token account addresses
+        }
+      }
+
+      // ── Build buyer sequence ────────────────────────────────────────
       const buyerSequence: any[] = [];
       const topOriginators: any[] = [];
 
-      // Optimize: Use getMultipleAccounts instead of sequential getAccountInfo (solves freezing/timeout)
-      const addressesToFetch = topHolders.map((acc: any) => acc.address);
-      let accountOwners: string[] = [];
-      
-      try {
-        const accInfosResult = await this.rpc(apiKey, 'getMultipleAccounts', [
-          addressesToFetch,
-          { encoding: 'jsonParsed', commitment: 'confirmed' }
-        ]);
-        
-        accountOwners = accInfosResult?.value?.map((info: any, idx: number) => {
-          return info?.data?.parsed?.info?.owner || addressesToFetch[idx];
-        }) || addressesToFetch;
-      } catch (_e) {
-        // Fallback if getMultipleAccounts fails
-        accountOwners = addressesToFetch;
-      }
-
       for (let i = 0; i < topHolders.length; i++) {
         const ownerAddress = accountOwners[i];
-
         const score = Math.max(0.1, 0.95 - i * 0.08);
         let classification = 'likely_follower';
         if (score >= 0.7) classification = 'genuine_originator';
@@ -263,11 +297,7 @@ export class LiveAnalyzer {
 
         buyerSequence.push(buyer);
         if (score >= 0.7) {
-          topOriginators.push({
-            position: i + 1,
-            wallet: ownerAddress,
-            originator_score: Math.round(score * 100) / 100
-          });
+          topOriginators.push({ position: i + 1, wallet: ownerAddress, originator_score: Math.round(score * 100) / 100 });
         }
       }
 
@@ -279,7 +309,7 @@ export class LiveAnalyzer {
           total_buyers_analyzed: topHolders.length,
           analysis_basis: depth === 'advanced' ? 'advanced_top_current_holders' : 'top_current_holders',
           market_structure: depth === 'advanced' ? {
-            holder_concentration: Math.round((Math.random() * 0.4 + 0.5) * 100) / 100, // Gini estimate
+            holder_concentration: Math.round((Math.random() * 0.4 + 0.5) * 100) / 100,
             volume_velocity: ['slow', 'moderate', 'fast'][Math.floor(Math.random() * 3)],
             holder_growth_rate: Math.round((Math.random() * 0.2 - 0.05) * 100) / 100,
             transaction_frequency: ['low', 'medium', 'high'][Math.floor(Math.random() * 3)]
@@ -296,6 +326,7 @@ export class LiveAnalyzer {
   }
 
   private generateEmptyWalletResponse(wallet: string) {
+
     return {
       wallet,
       wallet_snippet: wallet.slice(0, 6) + '...' + wallet.slice(-4),
