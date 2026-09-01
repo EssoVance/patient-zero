@@ -39,18 +39,15 @@ export class LiveAnalyzer {
     try {
       const accountInfo = await this.rpc(apiKey, 'getAccountInfo', [
         address,
-        { encoding: 'jsonParsed' }
+        { encoding: 'base64' }
       ]);
       
       if (!accountInfo?.value) return 'unknown';
       
       const owner = accountInfo.value.owner;
-      const data = accountInfo.value.data;
       
-      if (owner === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' || owner === 'TokenzQdBNbLqP5VEhvkVNmacF6baWeCjEMegGkLqXw') {
-        if (data && typeof data === 'object' && data.parsed?.type === 'mint') {
-          return 'token';
-        }
+      if (owner === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' || owner === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') {
+        return 'token';
       }
       
       return 'wallet';
