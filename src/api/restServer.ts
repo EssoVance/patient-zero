@@ -87,7 +87,7 @@ app.get('/api/stats', (_req: Request, res: Response) => {
 
 //  POST /api/analyze/wallet 
 app.post('/api/analyze/wallet', async (req: Request, res: Response) => {
-  const { wallet_address, user_api_key } = req.body as { wallet_address?: string, user_api_key?: string };
+  const { wallet_address, user_api_key, analysis_depth } = req.body as { wallet_address?: string, user_api_key?: string, analysis_depth?: string };
   if (!wallet_address) {
     res.status(400).json({ error: 'wallet_address is required' });
     return;
@@ -98,7 +98,7 @@ app.post('/api/analyze/wallet', async (req: Request, res: Response) => {
   }
 
   try {
-    const analysis = await liveAnalyzer.analyzeWalletLive(wallet_address, user_api_key);
+    const analysis = await liveAnalyzer.analyzeWalletLive(wallet_address, user_api_key, analysis_depth as 'basic' | 'advanced');
     res.json(analysis);
   } catch (err: any) {
     logger.error('Live wallet analysis failed', err);
@@ -108,7 +108,7 @@ app.post('/api/analyze/wallet', async (req: Request, res: Response) => {
 
 //  POST /api/analyze/token 
 app.post('/api/analyze/token', async (req: Request, res: Response) => {
-  const { token_address, user_api_key } = req.body as { token_address?: string, user_api_key?: string };
+  const { token_address, user_api_key, analysis_depth } = req.body as { token_address?: string, user_api_key?: string, analysis_depth?: string };
   if (!token_address) {
     res.status(400).json({ error: 'token_address is required' });
     return;
@@ -119,7 +119,7 @@ app.post('/api/analyze/token', async (req: Request, res: Response) => {
   }
 
   try {
-    const analysis = await liveAnalyzer.analyzeTokenLive(token_address, user_api_key);
+    const analysis = await liveAnalyzer.analyzeTokenLive(token_address, user_api_key, analysis_depth as 'basic' | 'advanced');
     res.json(analysis);
   } catch (err: any) {
     logger.error('Live token analysis failed', err);

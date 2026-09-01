@@ -52,6 +52,14 @@ const analysisError = document.getElementById('analysis-error') as HTMLDivElemen
 const validationMsg = document.getElementById('addr-validation-msg') as HTMLDivElement;
 
 const apiKeyInput = document.getElementById('api-key-input') as HTMLInputElement;
+const depthRadios = document.querySelectorAll('input[name="analysisDepth"]');
+const advancedWarning = document.getElementById('advanced-warning') as HTMLDivElement;
+
+depthRadios.forEach(r => r.addEventListener('change', (e) => {
+  const val = (e.target as HTMLInputElement).value;
+  advancedWarning.style.display = val === 'advanced' ? 'block' : 'none';
+}));
+
 const shareCardPanel = document.getElementById('share-card-panel') as HTMLElement;
 const btnShareImage = document.getElementById('btn-share-image') as HTMLButtonElement;
 const btnShareText = document.getElementById('btn-share-text') as HTMLButtonElement;
@@ -229,6 +237,14 @@ analysisBtn.addEventListener('click', async () => {
     }
   }
 
+  const depthRadios = document.getElementsByName('analysisDepth');
+  let depth = 'basic';
+  for (let i = 0; i < depthRadios.length; i++) {
+    if ((depthRadios[i] as HTMLInputElement).checked) {
+      depth = (depthRadios[i] as HTMLInputElement).value;
+    }
+  }
+
   appState.setLoading(true);
   briefingPanel.classList.add('hidden');
   shareCardPanel.classList.add('hidden');
@@ -241,7 +257,8 @@ analysisBtn.addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         [`${type}_address`]: address,
-        user_api_key: appState.userApiKey
+        user_api_key: appState.userApiKey,
+        analysis_depth: depth
       })
     });
     const data = await res.json();
@@ -281,6 +298,20 @@ function renderWalletSummary(res: WalletAnalysisResult): void {
 
   if (!historyHtml) historyHtml = '<div class="history-item" style="color:rgba(255,255,255,0.4)">No recent DEX activity found.</div>';
 
+  let advancedHtml = '';
+  if ((res as any).advanced_metrics) {
+    const am = (res as any).advanced_metrics;
+    advancedHtml = `
+      <h3 style="margin-top: 24px; font-size: 11px; color:#ffcc00;">Advanced Metrics</h3>
+      <div class="summary-stat"><span>Network Centrality:</span> <span>${(am.network_centrality * 100).toFixed(1)}%</span></div>
+      <div class="summary-stat"><span>Cascade Influence:</span> <span style="text-transform:uppercase">${am.cascade_influence}</span></div>
+      <div class="summary-stat"><span>Consistency Score:</span> <span>${(am.consistency_score * 100).toFixed(1)}%</span></div>
+      <div class="summary-stat"><span>Risk Profile:</span> <span style="text-transform:uppercase">${am.risk_profile}</span></div>
+      <div class="summary-stat"><span>Peak Activity:</span> <span>${Math.min(...am.peak_activity_hours)}:00 - ${Math.max(...am.peak_activity_hours)}:00 UTC</span></div>
+      <div class="summary-stat"><span>Percentile Rank:</span> <span>Top ${100 - am.percentile_ranking}%</span></div>
+    `;
+  }
+
   summaryPanel.innerHTML = `
     <h3>Wallet Leadership Summary</h3>
     <div class="summary-stat"><span>Classification:</span> <span style="color:#00ffff">${res.classification.replace('_', ' ').toUpperCase()}</span></div>
@@ -289,6 +320,7 @@ function renderWalletSummary(res: WalletAnalysisResult): void {
     <div class="summary-stat"><span>Confidence:</span> <span>${(res.confidence * 100).toFixed(1)}%</span></div>
     <div class="summary-stat"><span>Early Entry Rate:</span> <span>${(indicators.early_entry_rate * 100).toFixed(1)}%</span></div>
     <div class="summary-stat"><span>Leadership Evidence:</span> <span style="text-transform:uppercase">${indicators.leadership_evidence}</span></div>
+    ${advancedHtml}
     
     <h3 style="margin-top: 24px; font-size: 11px;">Recent DEX Activity</h3>
     <div class="history-list">
@@ -327,51 +359,239 @@ btnShareText.addEventListener('click', () => {
 btnShareImage.addEventListener('click', () => {
   const ctx = shareCanvas.getContext('2d');
   if (!ctx) return;
-  
-  shareCanvas.width = 600;
-  shareCanvas.height = 300;
-  
-  ctx.fillStyle = '#000A14';
-  ctx.fillRect(0, 0, 600, 300);
-  
-  ctx.strokeStyle = 'rgba(0, 255, 200, 0.2)';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(2, 2, 596, 296);
+
+  const W = 700, H = 420;
+  shareCanvas.width = W;
+  shareCanvas.height = H;
+
+  // ── Premium gradient background ──────────────────────────────
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+  bgGrad.addColorStop(0,   '#050d18');
+  bgGrad.addColorStop(0.5, '#071620');
+  bgGrad.addColorStop(1,   '#030b12');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle grid overlay
+  ctx.strokeStyle = 'rgba(0,255,200,0.04)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < W; x += 24) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y < H; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+  // Border glow
+  const borderGrad = ctx.createLinearGradient(0, 0, W, H);
+  borderGrad.addColorStop(0, 'rgba(0,255,255,0.6)');
+  borderGrad.addColorStop(0.5, 'rgba(0,255,120,0.3)');
+  borderGrad.addColorStop(1, 'rgba(0,255,255,0.6)');
+  ctx.strokeStyle = borderGrad;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, W - 2, H - 2);
+
+  // ── Header ───────────────────────────────────────────────────
+  ctx.fillStyle = 'rgba(0,255,200,0.08)';
+  ctx.fillRect(0, 0, W, 54);
+  ctx.strokeStyle = 'rgba(0,255,200,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, 54); ctx.lineTo(W, 54); ctx.stroke();
 
   ctx.fillStyle = '#00ffff';
-  ctx.font = 'bold 24px monospace';
-  ctx.fillText('PATIENT ZERO // BIOLUMINESCENCE', 30, 50);
-  
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '16px monospace';
-  
+  ctx.font = 'bold 15px monospace';
+  ctx.fillText('PATIENT ZERO // BIOLUMINESCENCE', 20, 33);
+
+  // Timestamp top-right
+  ctx.fillStyle = 'rgba(0,255,200,0.4)';
+  ctx.font = '10px monospace';
+  const timestamp = new Date().toUTCString().replace(' GMT', ' UTC');
+  ctx.fillText(timestamp, W - ctx.measureText(timestamp).width - 16, 33);
+
+  // ── Helper: draw horizontal bar gauge ────────────────────────
+  function drawGauge(x: number, y: number, w: number, value: number, color: string, label: string) {
+    const pct = Math.max(0, Math.min(1, value));
+    // Track
+    ctx.fillStyle = 'rgba(0,255,200,0.1)';
+    ctx.fillRect(x, y, w, 8);
+    // Fill
+    const fillGrad = ctx.createLinearGradient(x, 0, x + w * pct, 0);
+    fillGrad.addColorStop(0, color);
+    fillGrad.addColorStop(1, '#00ff80');
+    ctx.fillStyle = fillGrad;
+    ctx.fillRect(x, y, w * pct, 8);
+    // Label
+    ctx.fillStyle = 'rgba(0,255,200,0.6)';
+    ctx.font = '9px monospace';
+    ctx.fillText(label, x, y - 3);
+    // Value
+    ctx.fillStyle = '#00ffcc';
+    ctx.fillText((pct * 100).toFixed(0) + '%', x + w + 4, y + 7);
+  }
+
   if (appState.analysisType === 'wallet' && appState.analysisResult) {
     const res = appState.analysisResult as WalletAnalysisResult;
-    ctx.fillText(`Wallet Analysis: ${res.wallet_snippet}`, 30, 100);
-    ctx.fillStyle = '#00ff80';
-    ctx.fillText(`Class: ${res.classification.replace('_', ' ').toUpperCase()}`, 30, 140);
-    ctx.fillText(`Originator Score: ${(res.originator_score * 100).toFixed(1)}%`, 30, 170);
-    
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.font = '12px monospace';
-    ctx.fillText(`Based on ${res.analysis_basis}`, 30, 250);
+    const am = (res as any).advanced_metrics;
+    const depth = am ? 'Advanced Analysis (150 tx)' : 'Basic Analysis (50 tx)';
+    const snippet = res.wallet_snippet || `${res.wallet?.slice(0,6)}...${res.wallet?.slice(-4)}`;
+
+    // Sub-header
+    ctx.fillStyle = 'rgba(0,255,200,0.5)';
+    ctx.font = '9px monospace';
+    ctx.fillText('WALLET ANALYSIS  //  ' + depth, 20, 72);
+
+    // Wallet address
+    ctx.fillStyle = '#00ffff';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText(snippet, 20, 92);
+
+    // Classification badge
+    const cls = res.classification.replace(/_/g, ' ').toUpperCase();
+    const clsColor = res.originator_score >= 0.7 ? '#00ffcc' : (res.originator_score >= 0.4 ? '#ffcc00' : '#ff6666');
+    ctx.fillStyle = `${clsColor}22`;
+    const bw = ctx.measureText(cls).width + 20;
+    ctx.fillRect(20, 100, bw, 20);
+    ctx.strokeStyle = clsColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(20, 100, bw, 20);
+    ctx.fillStyle = clsColor;
+    ctx.font = 'bold 10px monospace';
+    ctx.fillText(cls, 30, 114);
+
+    // ── Score gauges ─────────────────────────────────────────────
+    const gx = 20, gy = 148, gw = 220;
+    drawGauge(gx, gy,       gw, res.originator_score, '#00ffff', 'ORIGINATOR SCORE');
+    if (res.confidence !== undefined) drawGauge(gx, gy + 28, gw, res.confidence,       '#00ff80', 'CONFIDENCE');
+    if (res.leadership_indicators) {
+      drawGauge(gx, gy + 56, gw, res.leadership_indicators.early_entry_rate, '#00ffcc', 'EARLY ENTRY RATE');
+    }
+
+    // ── Advanced metrics panel ────────────────────────────────────
+    if (am) {
+      ctx.fillStyle = 'rgba(255,204,0,0.06)';
+      ctx.fillRect(260, 130, 420, 230);
+      ctx.strokeStyle = 'rgba(255,204,0,0.2)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(260, 130, 420, 230);
+
+      ctx.fillStyle = '#ffcc00';
+      ctx.font = 'bold 10px monospace';
+      ctx.fillText('ADVANCED METRICS', 272, 148);
+      ctx.strokeStyle = 'rgba(255,204,0,0.15)';
+      ctx.beginPath(); ctx.moveTo(272, 152); ctx.lineTo(668, 152); ctx.stroke();
+
+      const mx = 272, mw = 160;
+      drawGauge(mx, 172, mw, am.network_centrality,  '#ffcc00', 'NETWORK CENTRALITY');
+      drawGauge(mx, 200, mw, am.consistency_score,   '#ff9900', 'CONSISTENCY SCORE');
+      drawGauge(mx + 190, 172, mw, am.percentile_ranking / 100, '#00ffff', 'PERCENTILE RANK');
+
+      ctx.fillStyle = 'rgba(0,255,200,0.5)';
+      ctx.font = '9px monospace';
+      ctx.fillText('CASCADE INFLUENCE:', mx, 230);
+      ctx.fillText('RISK PROFILE:', mx + 190, 230);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText(am.cascade_influence.toUpperCase(), mx, 244);
+      ctx.fillText(am.risk_profile.toUpperCase(), mx + 190, 244);
+
+      // Percentile bar (big visual)
+      ctx.fillStyle = 'rgba(0,255,200,0.1)';
+      ctx.fillRect(mx, 270, 370, 12);
+      const pGrad = ctx.createLinearGradient(mx, 0, mx + 370, 0);
+      pGrad.addColorStop(0, '#001a0a'); pGrad.addColorStop(1, '#00ffff');
+      ctx.fillStyle = pGrad;
+      ctx.fillRect(mx, 270, (am.percentile_ranking / 100) * 370, 12);
+      ctx.fillStyle = '#00ffcc'; ctx.font = '9px monospace';
+      ctx.fillText(`Top ${100 - am.percentile_ranking}% of tracked wallets`, mx, 297);
+    }
+
+    // ── Basic stats right panel (no advanced) ──────────────────
+    if (!am) {
+      ctx.fillStyle = 'rgba(0,255,200,0.5)';
+      ctx.font = '9px monospace';
+      ctx.fillText('TXS ANALYZED:', 260, 150);
+      ctx.fillText('EARLY ENTRY RATE:', 260, 175);
+      ctx.fillText('LEADERSHIP EVIDENCE:', 260, 200);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px monospace';
+      ctx.fillText(String(res.transaction_count ?? 50), 260, 165);
+      ctx.fillText((res.leadership_indicators?.early_entry_rate * 100 ?? 0).toFixed(1) + '%', 260, 190);
+      ctx.fillText((res.leadership_indicators?.leadership_evidence ?? 'N/A').toUpperCase(), 260, 215);
+    }
+
   } else if (appState.analysisType === 'token' && appState.analysisResult) {
     const res = appState.analysisResult as TokenAnalysisResult;
-    ctx.fillText(`Token Analysis: ${res.token_analysis.token_address.slice(0,8)}...`, 30, 100);
-    
-    ctx.fillStyle = '#00ff80';
-    res.top_originators.slice(0,3).forEach((o, i) => {
-      ctx.fillText(`Top Originator #${i+1}: ${o.wallet.slice(0,6)}... (${(o.originator_score*100).toFixed(1)}%)`, 30, 140 + (i*30));
+    const ms = (res.token_analysis as any).market_structure;
+    const depth = ms ? 'Advanced Analysis' : 'Basic Analysis';
+
+    ctx.fillStyle = 'rgba(0,255,200,0.5)';
+    ctx.font = '9px monospace';
+    ctx.fillText('TOKEN ANALYSIS  //  ' + depth, 20, 72);
+
+    ctx.fillStyle = '#00ffff';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText(`${res.token_analysis.token_symbol}  ${res.token_analysis.token_address.slice(0,8)}...`, 20, 92);
+
+    // Top originators list
+    ctx.fillStyle = 'rgba(0,255,200,0.5)';
+    ctx.font = '9px monospace';
+    ctx.fillText('TOP ORIGINATORS', 20, 120);
+    res.top_originators.slice(0, 5).forEach((o, i) => {
+      const scoreColor = o.originator_score >= 0.7 ? '#00ffff' : '#00ff80';
+      ctx.fillStyle = scoreColor;
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText(`#${i+1} ${o.wallet.slice(0,6)}...${o.wallet.slice(-4)}`, 20, 140 + i * 22);
+      ctx.fillStyle = 'rgba(0,255,200,0.5)';
+      ctx.font = '9px monospace';
+      ctx.fillText(`${(o.originator_score * 100).toFixed(0)}%`, 230, 140 + i * 22);
     });
-    
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.font = '12px monospace';
-    ctx.fillText(`Based on ${res.token_analysis.analysis_basis}`, 30, 250);
+
+    // Market structure panel
+    if (ms) {
+      ctx.fillStyle = 'rgba(0,100,80,0.15)';
+      ctx.fillRect(290, 68, 390, 290);
+      ctx.strokeStyle = 'rgba(0,255,200,0.2)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(290, 68, 390, 290);
+
+      ctx.fillStyle = '#00ffcc';
+      ctx.font = 'bold 10px monospace';
+      ctx.fillText('MARKET STRUCTURE', 302, 86);
+      ctx.strokeStyle = 'rgba(0,255,200,0.15)';
+      ctx.beginPath(); ctx.moveTo(302, 90); ctx.lineTo(668, 90); ctx.stroke();
+
+      const sx = 302, sw = 155;
+      drawGauge(sx, 110, sw, ms.holder_concentration, '#ff6666', 'HOLDER CONCENTRATION');
+      drawGauge(sx, 138, sw, ms.holder_growth_rate + 0.1, '#00ff80', 'HOLDER GROWTH');
+
+      ctx.fillStyle = 'rgba(0,255,200,0.5)';
+      ctx.font = '9px monospace';
+      const labels = ['VOLUME VELOCITY', 'TX FREQUENCY'];
+      const vals   = [ms.volume_velocity, ms.transaction_frequency];
+      labels.forEach((l, i) => {
+        ctx.fillStyle = 'rgba(0,255,200,0.5)';
+        ctx.font = '9px monospace';
+        ctx.fillText(l + ':', sx + i * 170, 175);
+        ctx.fillStyle = '#00ffff';
+        ctx.font = 'bold 12px monospace';
+        ctx.fillText(vals[i].toUpperCase(), sx + i * 170, 191);
+      });
+    }
   }
-  
+
+  // ── Quality seal ─────────────────────────────────────────────
+  const sealX = W - 140, sealY = H - 46;
+  ctx.fillStyle = 'rgba(0,255,200,0.08)';
+  ctx.fillRect(sealX, sealY, 124, 32);
+  ctx.strokeStyle = 'rgba(0,255,200,0.4)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(sealX, sealY, 124, 32);
+  ctx.fillStyle = '#00ffcc';
+  ctx.font = 'bold 9px monospace';
+  ctx.fillText('✓ PATIENT ZERO CERTIFIED', sealX + 8, sealY + 14);
+  ctx.fillStyle = 'rgba(0,255,200,0.5)';
+  ctx.font = '8px monospace';
+  ctx.fillText('@EssoVance — BIOLUMINESCENCE', sealX + 8, sealY + 25);
+
   const link = document.createElement('a');
-  link.download = 'patient-zero-analysis.png';
-  link.href = shareCanvas.toDataURL();
+  link.download = 'patient-zero-premium-card.png';
+  link.href = shareCanvas.toDataURL('image/png');
   link.click();
 });
 

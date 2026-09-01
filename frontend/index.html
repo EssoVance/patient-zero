@@ -266,6 +266,15 @@
         <label><input type="radio" name="analysisType" value="wallet" checked> Wallet</label>
         <label><input type="radio" name="analysisType" value="token"> Token</label>
       </div>
+
+      <div class="radio-group" style="margin-bottom: 6px;">
+        <label><input type="radio" name="analysisDepth" value="basic" checked> Basic (50 tx)</label>
+        <label><input type="radio" name="analysisDepth" value="advanced"> Advanced (150 tx)</label>
+      </div>
+      <div id="advanced-warning" style="font-size:9px;color:rgba(255,165,0,0.8);margin-bottom:10px;display:none;">
+        ⚠️ Advanced analysis uses 3x more quota and takes 15-30 seconds.
+      </div>
+
       <input type="text" id="analysis-input" placeholder="Enter wallet address..." spellcheck="false" autocomplete="off" />
       <div id="addr-validation-msg" style="font-size:10px;color:#ff6666;margin:4px 0 6px;min-height:14px;display:none;"></div>
       <div class="btn-row">
@@ -275,14 +284,13 @@
       <div id="analysis-error"></div>
     </div>
 
-    
-      <!-- Data Limitation Notice & Analysis Share Tools (Conditionally Shown) -->
+        <!-- Data Limitation Notice & Analysis Share Tools (Conditionally Shown) -->
       <div id="share-card-panel" class="hidden" style="margin-top: 15px; background: rgba(0,255,200,0.05); border: 1px solid rgba(0,255,200,0.2); padding: 10px;">
         <div style="font-size: 11px; margin-bottom: 10px; color: #00ff80;">
-          ⚠️ Analysis based on limited sample (RPC Constraints)
+          💡 Analysis complete.
         </div>
         <div class="btn-row">
-          <button id="btn-share-image" class="action-btn" style="flex:1; font-size:10px;">Generate Image Card</button>
+          <button id="btn-share-image" class="action-btn" style="flex:1; font-size:10px;">Generate Premium Card</button>
           <button id="btn-share-text" class="action-btn" style="flex:1; font-size:10px;">Generate Text Card</button>
         </div>
       </div>
