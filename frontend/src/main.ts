@@ -182,11 +182,12 @@ appState.on(() => {
       graphLegend.classList.add('hidden');
       mode2Scene.clear();
     } else if (appState.analysisType === 'token' && appState.analysisResult) {
-      mode2Scene.renderTokenAnalysis(appState.analysisResult as TokenAnalysisResult);
-      summaryPanel.classList.add('hidden');
+      renderTokenSummary(appState.analysisResult as TokenAnalysisResult);
+      summaryPanel.classList.remove('hidden');
       shareCardPanel.classList.remove('hidden');
       walletGraphControls.style.display = 'none';
       graphLegend.classList.add('hidden');
+      mode2Scene.clear();
     } else {
       summaryPanel.classList.add('hidden');
       shareCardPanel.classList.add('hidden');
@@ -418,6 +419,47 @@ function renderWalletSummary(res: WalletAnalysisResult): void {
     <div class="history-list">
       ${historyHtml}
     </div>
+  `;
+}
+
+function renderTokenSummary(res: TokenAnalysisResult): void {
+  const ta = res.token_analysis;
+  const topThree = res.buyer_sequence.slice(0, 3);
+  const allHolders = res.buyer_sequence;
+
+  const topHoldersHtml = topThree.map((b, i) => {
+    const color = b.originator_score >= 0.7 ? '#00ffff' : b.originator_score >= 0.4 ? '#00ff80' : 'rgba(0,255,200,0.5)';
+    const badge = b.originator_score >= 0.7 ? '🏆' : b.originator_score >= 0.4 ? '🔶' : '🔹';
+    return `
+    <div class="history-item">
+      <div>${badge} <span style="color:${color}">#${b.position} ${b.wallet_snippet}</span></div>
+      <div style="color:rgba(0,255,200,0.6);font-size:9px;">Score: ${(b.originator_score * 100).toFixed(1)}% · ${b.classification.replace('_',' ').toUpperCase()} · ${b.evidence.replace('_',' ')}</div>
+    </div>`;
+  }).join('');
+
+  const allHoldersHtml = allHolders.slice(3).map(b => {
+    const color = b.originator_score >= 0.4 ? '#00ff80' : 'rgba(0,255,200,0.5)';
+    return `<div class="history-item">
+      <div style="color:${color}">#${b.position} ${b.wallet_snippet} — ${(b.originator_score * 100).toFixed(1)}%</div>
+    </div>`;
+  }).join('');
+
+  const marketHtml = ta.market_structure ? `
+    <h3 style="margin-top:20px;font-size:11px;color:#ffcc00;">Market Structure</h3>
+    <div class="summary-stat"><span>Holder Concentration:</span> <span>${(ta.market_structure.holder_concentration * 100).toFixed(0)}%</span></div>
+    <div class="summary-stat"><span>Volume Velocity:</span> <span style="text-transform:uppercase">${ta.market_structure.volume_velocity}</span></div>
+    <div class="summary-stat"><span>Tx Frequency:</span> <span style="text-transform:uppercase">${ta.market_structure.transaction_frequency}</span></div>
+  ` : '';
+
+  summaryPanel.innerHTML = `
+    <h3>Token Analysis</h3>
+    <div class="summary-stat"><span>Token Address:</span> <span style="color:#00ffff;font-size:9px">${ta.token_address.slice(0,12)}...${ta.token_address.slice(-6)}</span></div>
+    <div class="summary-stat"><span>Holders Analyzed:</span> <span>${ta.total_buyers_analyzed}</span></div>
+    <div class="summary-stat"><span>Analysis Basis:</span> <span style="text-transform:uppercase">${ta.analysis_basis.replace(/_/g,' ')}</span></div>
+    ${marketHtml}
+    <h3 style="margin-top:20px;font-size:11px;">Top Originators</h3>
+    <div class="history-list">${topHoldersHtml || '<div class="history-item" style="color:rgba(255,255,255,0.4)">No top originators found.</div>'}</div>
+    ${allHoldersHtml ? `<h3 style="margin-top:16px;font-size:11px;">Other Holders</h3><div class="history-list">${allHoldersHtml}</div>` : ''}
   `;
 }
 
