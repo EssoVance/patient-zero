@@ -160,6 +160,7 @@ appState.on(() => {
     summaryPanel.classList.add('hidden');
     briefingPanel.classList.add('hidden');
     walletGraphControls.style.display = 'none';
+    graphLegend.classList.add('hidden');   // ← always hide relationship legend in Mode 1
     analysisError.style.display = 'none';
 
     particleSystem.setVisible(true);
