@@ -7,38 +7,15 @@ dotenv.config();
 
 export const CONFIG = {
   // ── Solana RPC ──────────────────────────────────────────
-  RPC_WS_ENDPOINT: (() => {
-    const ep = process.env.RPC_WS_ENDPOINT || 'wss://api.mainnet-beta.solana.com';
-    if (ep.includes('mainnet-beta')) {
-      return 'wss://mainnet.helius-rpc.com/?api-key=52587994-721f-4c60-99a3-0abeb3147b6d';
-    }
-    return ep;
-  })(),
-
-  RPC_HTTP_ENDPOINT: (() => {
-    const ep = process.env.RPC_HTTP_ENDPOINT || 'https://api.mainnet-beta.solana.com';
-    if (ep.includes('mainnet-beta')) {
-      return 'https://mainnet.helius-rpc.com/?api-key=52587994-721f-4c60-99a3-0abeb3147b6d';
-    }
-    return ep;
-  })(),
-
-  RPC_HTTP_ENDPOINTS: (() => {
-    const eps = process.env.RPC_HTTP_ENDPOINTS
-      ? process.env.RPC_HTTP_ENDPOINTS.split(',').map((u) => u.trim()).filter(Boolean)
-      : [process.env.RPC_HTTP_ENDPOINT || 'https://api.mainnet-beta.solana.com'];
-    
-    if (eps.some(e => e.includes('mainnet-beta'))) {
-      return [
-        'https://mainnet.helius-rpc.com/?api-key=52587994-721f-4c60-99a3-0abeb3147b6d',
-        'https://mainnet.helius-rpc.com/?api-key=25211244-f938-49f8-82c0-8d6e11a7c34f',
-        'https://mainnet.helius-rpc.com/?api-key=4f87ffc4-c153-43b9-b47a-d20e3f3129dc',
-        'https://mainnet.helius-rpc.com/?api-key=33511c41-400c-492c-8793-e565c0f8821a',
-        'https://mainnet.helius-rpc.com/?api-key=55c1da2d-bd52-49e0-bbd6-6808b65f2487'
-      ];
-    }
-    return eps;
-  })(),
+  RPC_WS_ENDPOINT: 'wss://mainnet.helius-rpc.com/?api-key=52587994-721f-4c60-99a3-0abeb3147b6d',
+  RPC_HTTP_ENDPOINT: 'https://mainnet.helius-rpc.com/?api-key=52587994-721f-4c60-99a3-0abeb3147b6d',
+  RPC_HTTP_ENDPOINTS: [
+    'https://mainnet.helius-rpc.com/?api-key=52587994-721f-4c60-99a3-0abeb3147b6d',
+    'https://mainnet.helius-rpc.com/?api-key=25211244-f938-49f8-82c0-8d6e11a7c34f',
+    'https://mainnet.helius-rpc.com/?api-key=4f87ffc4-c153-43b9-b47a-d20e3f3129dc',
+    'https://mainnet.helius-rpc.com/?api-key=33511c41-400c-492c-8793-e565c0f8821a',
+    'https://mainnet.helius-rpc.com/?api-key=55c1da2d-bd52-49e0-bbd6-6808b65f2487'
+  ],
 
   // ── On-chain programs ───────────────────────────────────
   PUMPFUN_PROGRAM_ID: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
