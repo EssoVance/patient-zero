@@ -420,7 +420,7 @@ function renderWalletSummary(res: WalletAnalysisResult): void {
   let historyHtml = res.recent_activity.map(h => `
     <div class="history-item">
       <div><span style="color:#00ffff">${h.token_name}</span> <span class="copyable-address" data-addr="${h.token_address}" title="Click to copy token address" style="font-size:9px;color:rgba(0,255,200,0.7)">(${h.token_address.slice(0,6)}..${h.token_address.slice(-4)}) <span class="copy-icon">📋</span></span></div>
-      <div style="color:rgba(0,255,200,0.6)">Entry: ${new Date(h.entry_time).toLocaleString()}</div>
+      <div style="color:rgba(0,255,200,0.6)">Last Interaction: ${new Date(h.entry_time).toLocaleString()}</div>
     </div>
   `).join('');
 
