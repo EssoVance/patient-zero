@@ -443,7 +443,7 @@ function renderWalletSummary(res: WalletAnalysisResult): void {
   summaryPanel.innerHTML = `
     <h3>Wallet Leadership Summary</h3>
     <div class="summary-stat"><span>Wallet:</span> <span class="copyable-address" data-addr="${(res as any).wallet || ''}" title="Click to copy full address" style="color:#00ffff;font-size:9px;">${res.wallet_snippet} <span class="copy-icon">📋</span></span></div>
-    <div class="summary-stat"><span>Classification:</span> <span style="color:#00ffff">${res.classification.replace('_', ' ').toUpperCase()}</span></div>
+    <div class="summary-stat"><span>Classification:</span> <span style="color:#00ffff">${res.classification.replace(/_/g, ' ').toUpperCase()}</span></div>
     <div class="summary-stat"><span>Transactions Analyzed:</span> <span>${res.transaction_count}</span></div>
     <div class="summary-stat"><span>Originator Score:</span> <span>${(res.originator_score * 100).toFixed(1)}%</span></div>
     <div class="summary-stat"><span>Confidence:</span> <span>${(res.confidence * 100).toFixed(1)}%</span></div>
@@ -469,7 +469,7 @@ function renderTokenSummary(res: TokenAnalysisResult): void {
     return `
     <div class="history-item">
       <div>${badge} <span class="copyable-address" data-addr="${b.wallet}" title="Click to copy" style="color:${color}">#${b.position} ${b.wallet_snippet} <span class="copy-icon">📋</span></span></div>
-      <div style="color:rgba(0,255,200,0.6);font-size:9px;">Score: ${(b.originator_score * 100).toFixed(1)}% · ${b.classification.replace('_',' ').toUpperCase()} · ${b.evidence.replace('_',' ')}</div>
+      <div style="color:rgba(0,255,200,0.6);font-size:9px;">Score: ${(b.originator_score * 100).toFixed(1)}% · ${b.classification.replace(/_/g,' ').toUpperCase()} · ${b.evidence.replace(/_/g,' ')}</div>
     </div>`;
   }).join('');
 
@@ -506,7 +506,7 @@ btnShareText.addEventListener('click', () => {
     const res = appState.analysisResult as WalletAnalysisResult;
     text = `🧬 **PATIENT ZERO Analysis**\n\n` +
            `**Wallet:** \`${res.wallet_snippet}\`\n` +
-           `**Class:** ${res.classification.replace('_', ' ').toUpperCase()}\n` +
+           `**Class:** ${res.classification.replace(/_/g, ' ').toUpperCase()}\n` +
            `**Originator Score:** ${(res.originator_score * 100).toFixed(1)}%\n` +
            `*Based on ${res.analysis_basis}*\n\n` +
            `🔗 patient-zero-app.vercel.app`;
