@@ -509,7 +509,7 @@ btnShareText.addEventListener('click', () => {
            `**Class:** ${res.classification.replace('_', ' ').toUpperCase()}\n` +
            `**Originator Score:** ${(res.originator_score * 100).toFixed(1)}%\n` +
            `*Based on ${res.analysis_basis}*\n\n` +
-           `_Analyze wallets for free at bioluminescence.xyz_`;
+           `🔗 patient-zero-app.vercel.app`;
   } else if (appState.analysisType === 'token' && appState.analysisResult) {
     const res = appState.analysisResult as TokenAnalysisResult;
     const top = res.top_originators.slice(0,3).map(o => `• \`${o.wallet.slice(0,4)}..${o.wallet.slice(-4)}\` (${(o.originator_score*100).toFixed(1)}%)`).join('\n');
@@ -517,7 +517,7 @@ btnShareText.addEventListener('click', () => {
            `**Token:** \`${res.token_analysis.token_address.slice(0,8)}...\`\n` +
            `**Top Originators:**\n${top}\n\n` +
            `*Based on ${res.token_analysis.analysis_basis}*\n\n` +
-           `_Analyze tokens for free at bioluminescence.xyz_`;
+           `🔗 patient-zero-app.vercel.app`;
   }
   if (navigator.clipboard) {
     navigator.clipboard.writeText(text);
@@ -958,7 +958,7 @@ function showMode1Briefing(wallet: string, x: number, y: number) {
   }
 
   briefingContent.innerHTML = `
-    <div style="font-size:14px;color:#00ffff;margin-bottom:8px;font-weight:bold;">${wallet.slice(0,6)}...${wallet.slice(-4)}</div>
+    <div class="copyable-address" data-addr="${wallet}" title="Click to copy full address" style="font-size:14px;color:#00ffff;margin-bottom:8px;font-weight:bold;cursor:pointer;">${wallet.slice(0,6)}...${wallet.slice(-4)} <span class="copy-icon">📋</span></div>
     <div style="font-size:11px;color:#00ffcc;margin-bottom:12px;text-transform:uppercase;">${classification}</div>
     
     <div style="font-size:11px;margin-bottom:4px;display:flex;justify-content:space-between;">
@@ -995,7 +995,7 @@ async function fetchAndShowBriefing(wallet: string, x: number, y: number) {
     const data: WalletBriefing = await res.json();
 
     briefingContent.innerHTML = `
-      <div style="font-size:14px;color:#00ffff;margin-bottom:8px;font-weight:bold;">${data.wallet_snippet}</div>
+      <div class="copyable-address" data-addr="${data.wallet}" title="Click to copy full address" style="font-size:14px;color:#00ffff;margin-bottom:8px;font-weight:bold;cursor:pointer;">${data.wallet_snippet} <span class="copy-icon">📋</span></div>
       <div style="font-size:11px;color:#00ffcc;margin-bottom:12px;text-transform:uppercase;">${data.classification}</div>
       
       <div style="font-size:11px;margin-bottom:4px;display:flex;justify-content:space-between;">
