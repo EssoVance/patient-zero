@@ -112,6 +112,8 @@ async function handleNewPair(token: PumpFunToken): Promise<void> {
 
 function startBroadcastLoop(): void {
   setInterval(() => {
+    // Skip serializing + broadcasting entirely when no frontend is connected
+    if (wsServer.getClientCount() === 0) return;
     wsServer.broadcast(graphStore.serialize());
   }, CONFIG.BROADCAST_INTERVAL_MS);
 }

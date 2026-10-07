@@ -57,7 +57,13 @@ class PatientZeroWsServer {
     }, 30_000);
   }
 
+  /** Number of currently connected frontends. */
+  getClientCount(): number {
+    return this.clients.size;
+  }
+
   broadcast(data: GraphStateSerialized): void {
+    // Only broadcast when at least one frontend is connected
     if (this.clients.size === 0) return;
     const payload = JSON.stringify(data);
     for (const ws of this.clients) {
