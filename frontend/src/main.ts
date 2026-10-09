@@ -32,7 +32,7 @@ let lastPairCount = 0;
 let audioStarted = false;
 
 // Always use the Render backend for REST calls since the app is deployed on Vercel
-const API_URL = 'https://patient-zero-backend.onrender.com/api';
+const API_URL = 'https://patient-zero-backend-mvc9.onrender.com/api';
 
 // ── DOM Elements ──────────────────────────────────────────────
 const btnMode1 = document.getElementById('btn-mode1')!;

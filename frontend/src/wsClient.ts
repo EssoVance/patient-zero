@@ -52,7 +52,7 @@ class WsClient {
   // Configurable endpoint — reads VITE env var or falls back to localhost
   private readonly endpoint = (() => {
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    return isLocal ? 'ws://localhost:8080' : 'wss://patient-zero-backend.onrender.com';
+    return isLocal ? 'ws://localhost:8080' : 'wss://patient-zero-backend-mvc9.onrender.com';
   })();
 
   connect(): void {
