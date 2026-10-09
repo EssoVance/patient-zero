@@ -1,15 +1,19 @@
 import { WebSocketServer as WsServer, WebSocket } from 'ws';
+import { EventEmitter } from 'events';
 import { GraphStateSerialized } from '../types';
 import { CONFIG, logger } from '../config';
 
 // ============================================================
 // PATIENT ZERO — WebSocket Server
 // Broadcasts live GraphState snapshots to connected frontends.
+// Emits 'active' when the first viewer connects,
+// and 'idle' when the last viewer disconnects — so the backend
+// can pause Solana monitoring when nobody is watching.
 // ============================================================
 
 import * as http from 'http';
 
-class PatientZeroWsServer {
+class PatientZeroWsServer extends EventEmitter {
   private wss: WsServer | null = null;
   private clients: Set<WebSocket> = new Set();
   private heartbeatInterval: NodeJS.Timeout | null = null;
@@ -22,17 +26,31 @@ class PatientZeroWsServer {
     });
 
     this.wss.on('connection', (ws) => {
+      const wasIdle = this.clients.size === 0;
       this.clients.add(ws);
       logger.info(`WS client connected (total: ${this.clients.size})`);
+
+      // First viewer connected — wake up Solana monitoring
+      if (wasIdle) {
+        logger.info('First viewer connected — resuming blockchain monitoring');
+        this.emit('active');
+      }
 
       ws.on('close', () => {
         this.clients.delete(ws);
         logger.info(`WS client disconnected (total: ${this.clients.size})`);
+
+        // Last viewer left — pause Solana monitoring to save bandwidth
+        if (this.clients.size === 0) {
+          logger.info('All viewers disconnected — pausing blockchain monitoring');
+          this.emit('idle');
+        }
       });
 
       ws.on('error', (err) => {
         logger.warn('WS client error', err);
         this.clients.delete(ws);
+        if (this.clients.size === 0) this.emit('idle');
       });
 
       // Mark alive for heartbeat

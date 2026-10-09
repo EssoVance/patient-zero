@@ -152,7 +152,7 @@ async function main(): Promise<void> {
   const server = startRestServer();
   wsServer.start(server);
 
-  // Wire Pump.fun monitor
+  // Wire Pump.fun monitor events (listeners registered once, always)
   pumpfunMonitor.on('newPair', (token) => {
     handleNewPair(token).catch((err) =>
       logger.error('handleNewPair failed', err)
@@ -163,16 +163,34 @@ async function main(): Promise<void> {
     logger.warn('PumpFun monitor error', err);
   });
 
-  // Start loops
+  // ── Bandwidth-aware monitoring ──────────────────────────────
+  // PumpFun monitor only runs while a frontend is connected.
+  // UptimeRobot keeps the server awake via /api/health (zero
+  // bandwidth cost). The moment someone opens the site, monitoring
+  // resumes instantly. When everyone leaves, it pauses.
+
+  wsServer.on('active', () => {
+    pumpfunMonitor.start();
+  });
+
+  wsServer.on('idle', async () => {
+    pumpfunMonitor.stop();
+    // Clean up all active pair subscriptions
+    for (const [pairId, subId] of pairSubscriptions) {
+      await solanaConn.unsubscribe(subId).catch(() => {});
+      pairSubscriptions.delete(pairId);
+    }
+    logger.info('All Solana subscriptions cleared — bandwidth paused');
+  });
+  // ────────────────────────────────────────────────────────────
+
+  // Broadcast and graph refresh loops (CPU only — no network cost)
   startBroadcastLoop();
   startGraphRefreshLoop();
 
-  // Start monitoring
-  pumpfunMonitor.start();
-
   setupShutdown();
 
-  logger.info('PATIENT ZERO is live — monitoring Solana for new pairs…');
+  logger.info('PATIENT ZERO is live — awaiting first viewer to start monitoring…');
 }
 
 main().catch((err) => {
