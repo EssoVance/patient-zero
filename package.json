@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "ts-node --project tsconfig.json src/index.ts",
     "build": "tsc",
-    "build:backend": "tsc",
+    "build:backend": "npm install && tsc",
     "start": "node dist/src/index.js",
     "start:prod": "node dist/src/index.js",
     "frontend": "vite frontend --port 5173",
@@ -16,7 +16,11 @@
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.0",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.10",
     "@types/three": "^0.185.4",
+    "@types/ws": "^8.5.10",
     "axios": "^1.7.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -25,14 +29,11 @@
     "gif-encoder-2": "^1.0.5",
     "puppeteer": "^22.12.1",
     "three": "^0.185.1",
+    "typescript": "^5.5.3",
     "ws": "^8.17.1"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
     "@types/jest": "^29.5.12",
-    "@types/node": "^20.14.10",
-    "@types/ws": "^8.5.10",
     "concurrently": "^8.2.2",
     "jest": "^29.7.0",
     "nodemon": "^3.1.4",
